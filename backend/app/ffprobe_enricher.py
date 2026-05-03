@@ -22,6 +22,10 @@ class _CacheEntry:
 _CACHE: dict[str, _CacheEntry] = {}
 
 
+def _is_missing_fps(value: float | None) -> bool:
+    return value is None or value <= 0
+
+
 def _fps_from_ratio(value: str | None) -> float | None:
     if not value:
         return None
@@ -133,7 +137,7 @@ async def enrich_stream(stream: IngestStream) -> IngestStream:
     now = time.time()
     cached = _CACHE.get(cache_key)
     if cached and cached.expires_at > now:
-        if stream.metrics.fps is None and cached.fps is not None:
+        if _is_missing_fps(stream.metrics.fps) and cached.fps is not None:
             stream.metrics.fps = cached.fps
         if stream.metrics.scan_type == "unknown" and cached.scan_type in {"interlaced", "progressive"}:
             stream.metrics.scan_type = cached.scan_type
@@ -170,7 +174,7 @@ async def enrich_stream(stream: IngestStream) -> IngestStream:
         debug=best_debug,
     )
 
-    if stream.metrics.fps is None and fps is not None:
+    if _is_missing_fps(stream.metrics.fps) and fps is not None:
         stream.metrics.fps = fps
     if stream.metrics.scan_type == "unknown" and scan_type in {"progressive", "interlaced"}:
         stream.metrics.scan_type = scan_type

@@ -1465,11 +1465,13 @@ function TilePlayer({
   playbackUrl,
   muted,
   scanType,
+  protocol,
   children
 }: {
   playbackUrl: string | null;
   muted: boolean;
   scanType: "progressive" | "interlaced" | "unknown";
+  protocol: string | null | undefined;
   children?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1477,6 +1479,7 @@ function TilePlayer({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [boxSize, setBoxSize] = useState<{ width: number; height: number } | null>(null);
   const shouldDeinterlace = scanType !== "progressive";
+  const aggressiveSrtDeinterlace = scanType === "interlaced" && String(protocol || "").toUpperCase() === "SRT";
 
   useEffect(() => {
     const el = frameRef.current;
@@ -1597,6 +1600,7 @@ function TilePlayer({
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
+    let bobPhase = 0;
     const draw = () => {
       if (video.videoWidth <= 0 || video.videoHeight <= 0) {
         rafId = window.requestAnimationFrame(draw);
@@ -1613,14 +1617,36 @@ function TilePlayer({
       const px = frame.data;
       const stride = canvas.width * 4;
 
-      for (let y = 1; y < canvas.height - 1; y += 2) {
-        const row = y * stride;
-        const above = (y - 1) * stride;
-        const below = (y + 1) * stride;
-        for (let x = 0; x < stride; x += 4) {
-          px[row + x] = (px[above + x] + px[below + x]) >> 1;
-          px[row + x + 1] = (px[above + x + 1] + px[below + x + 1]) >> 1;
-          px[row + x + 2] = (px[above + x + 2] + px[below + x + 2]) >> 1;
+      if (aggressiveSrtDeinterlace) {
+        // Aggressive bob deinterlace for interlaced SRT feeds:
+        // preserve only one field per frame and upscale it to full frame.
+        const source = new Uint8ClampedArray(px);
+        const parity = bobPhase & 1;
+        for (let y = 0; y < canvas.height; y += 1) {
+          const srcLine = Math.min(
+            canvas.height - 1,
+            Math.max(0, Math.floor(y / 2) * 2 + parity)
+          );
+          const srcRow = srcLine * stride;
+          const dstRow = y * stride;
+          for (let x = 0; x < stride; x += 4) {
+            px[dstRow + x] = source[srcRow + x];
+            px[dstRow + x + 1] = source[srcRow + x + 1];
+            px[dstRow + x + 2] = source[srcRow + x + 2];
+            px[dstRow + x + 3] = source[srcRow + x + 3];
+          }
+        }
+        bobPhase += 1;
+      } else {
+        for (let y = 1; y < canvas.height - 1; y += 2) {
+          const row = y * stride;
+          const above = (y - 1) * stride;
+          const below = (y + 1) * stride;
+          for (let x = 0; x < stride; x += 4) {
+            px[row + x] = (px[above + x] + px[below + x]) >> 1;
+            px[row + x + 1] = (px[above + x + 1] + px[below + x + 1]) >> 1;
+            px[row + x + 2] = (px[above + x + 2] + px[below + x + 2]) >> 1;
+          }
         }
       }
 
@@ -1632,7 +1658,7 @@ function TilePlayer({
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [shouldDeinterlace, playbackUrl]);
+  }, [shouldDeinterlace, aggressiveSrtDeinterlace, playbackUrl]);
 
   return (
     <div ref={frameRef} className="mv-media-frame">
@@ -2083,6 +2109,7 @@ export function MultiviewerPage() {
                     playbackUrl={playbackUrl}
                     muted={tile.muted}
                     scanType={stream?.metrics.scan_type ?? "unknown"}
+                    protocol={stream?.protocol}
                   >
                     <div className="mv-state">{state}{preview?.reason ? `: ${preview.reason}` : ""}</div>
                     <div className="mv-overlay">
