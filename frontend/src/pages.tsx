@@ -70,12 +70,17 @@ function buildVlcUrl(stream: Stream): string {
     (import.meta.env.VITE_SRS_PUBLIC_HTTP_BASE_URL as string | undefined) ||
     `http://${window.location.hostname}:8080`;
   const host = window.location.hostname;
-  const appKey = `${stream.app}/${stream.stream_key}`;
+  const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
   const proto = String(stream.protocol || "").toLowerCase();
 
   if (proto === "srt") {
     const srtPort = (import.meta.env.VITE_SRS_SRT_PORT as string | undefined) || "10080";
-    return `srt://${host}:${srtPort}?streamid=#!::r=${appKey},m=play`;
+    const shortStreamId = sanitizeSrtPath(stream.stream_key || appKey);
+    const query = new URLSearchParams({
+      streamid: shortStreamId,
+      mode: "caller",
+    });
+    return `srt://${host}:${srtPort}?${query.toString()}`;
   }
   if (proto === "rtmp") {
     const rtmpPort = (import.meta.env.VITE_SRS_RTMP_PORT as string | undefined) || "1935";
@@ -94,6 +99,10 @@ function publicHost(): string {
 function frontendEnv(name: string, fallback: string): string {
   const value = import.meta.env[name] as string | undefined;
   return value && value.trim() ? value.trim() : fallback;
+}
+
+function sanitizeSrtPath(value: string): string {
+  return value.replace(/,m=[a-z_]+$/i, "").trim();
 }
 
 function formatFps(value: number | null | undefined): string {
@@ -418,7 +427,7 @@ export function StreamsPage() {
       stream,
       expected,
       health,
-      appStream: `${stream.app}/${stream.stream_key}`,
+      appStream: sanitizeSrtPath(`${stream.app}/${stream.stream_key}`),
       mode,
       inputBitrate,
       outputBitrate,
@@ -519,7 +528,7 @@ export function StreamsPage() {
     if (expected) return;
     setExpectedActionError(null);
     setExpectedDraft({
-      stream_id: stream.stream_key || stream.id,
+      stream_id: sanitizeSrtPath(stream.stream_key || stream.id),
       friendly_name: stream.name && stream.name !== "unknown" ? stream.name : stream.stream_key,
       umd: "",
       customer_or_event: "",
@@ -580,7 +589,6 @@ export function StreamsPage() {
             <th onClick={() => setSort("protocol")} className="sortable-col">Protocol <span>{sortMark("protocol")}</span></th>
             <th>App/stream key</th>
             <th>Source IP</th>
-            <th onClick={() => setSort("mode")} className="sortable-col">Caller/listener <span>{sortMark("mode")}</span></th>
             <th>Input bitrate</th>
             <th>Output bitrate</th>
             <th>Codec</th>
@@ -615,7 +623,6 @@ export function StreamsPage() {
                 </span>
               </td>
               <td>{row.stream.source_ip}</td>
-              <td>{row.mode}</td>
               <td>{row.inputBitrate} kbps</td>
               <td>{row.outputBitrate} kbps</td>
               <td>{row.codec}</td>
