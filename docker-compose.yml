@@ -52,6 +52,10 @@ services:
     restart: unless-stopped
     environment:
       VITE_BACKEND_API_URL: "${VITE_BACKEND_API_URL:-http://localhost:8000}"
+      VITE_SRS_RTMP_PORT: "${VITE_SRS_RTMP_PORT:-${SRS_RTMP_PORT:-1935}}"
+      VITE_SRS_SRT_PORT: "${VITE_SRS_SRT_PORT:-${SRS_SRT_PORT:-10080}}"
+      VITE_SRS_PUBLIC_HTTP_BASE_URL: "${VITE_SRS_PUBLIC_HTTP_BASE_URL:-${SRS_PUBLIC_HTTP_BASE_URL:-http://localhost:8080}}"
+      VITE_SRS_PUBLIC_WEBRTC_BASE_URL: "${VITE_SRS_PUBLIC_WEBRTC_BASE_URL:-${SRS_PUBLIC_WEBRTC_BASE_URL:-webrtc://localhost}}"
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:

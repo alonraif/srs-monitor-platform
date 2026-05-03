@@ -43,6 +43,8 @@ Open:
 `PREVIEW_SERVICE_URL` backend-to-preview internal URL
 `PREVIEW_PUBLIC_BASE_URL` public preview-service base URL
 `VITE_BACKEND_API_URL` frontend API base URL
+`VITE_SRS_RTMP_PORT`, `VITE_SRS_SRT_PORT` frontend-visible ingest ports
+`VITE_SRS_PUBLIC_HTTP_BASE_URL`, `VITE_SRS_PUBLIC_WEBRTC_BASE_URL` frontend-visible SRS public URLs
 `BACKEND_PORT`, `FRONTEND_PORT`, `PREVIEW_PORT` service ports
 `NODE_EXPORTER_PORT`, `CADVISOR_PORT` optional monitoring profile ports
 

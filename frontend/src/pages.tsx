@@ -87,6 +87,15 @@ function buildVlcUrl(stream: Stream): string {
   return `${base.replace(/\/$/, "")}/${appKey}.flv`;
 }
 
+function publicHost(): string {
+  return window.location.hostname || "localhost";
+}
+
+function frontendEnv(name: string, fallback: string): string {
+  const value = import.meta.env[name] as string | undefined;
+  return value && value.trim() ? value.trim() : fallback;
+}
+
 function formatFps(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "unknown";
   const nearestInt = Math.round(value);
@@ -2203,12 +2212,110 @@ export function MultiviewerPage() {
 }
 
 export function SettingsPage() {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const host = publicHost();
+  const appName = "live";
+  const streamKey = "<stream-key>";
+  const appStream = `${appName}/${streamKey}`;
+  const backendUrl = frontendEnv("VITE_BACKEND_API_URL", "http://localhost:8000");
+  const rtmpPort = frontendEnv("VITE_SRS_RTMP_PORT", "1935");
+  const srtPort = frontendEnv("VITE_SRS_SRT_PORT", "10080");
+  const httpBase = frontendEnv("VITE_SRS_PUBLIC_HTTP_BASE_URL", `http://${host}:8080`).replace(/\/$/, "");
+  const webrtcBase = frontendEnv("VITE_SRS_PUBLIC_WEBRTC_BASE_URL", `webrtc://${host}`).replace(/\/$/, "");
+  const ingestFormats = [
+    {
+      key: "rtmp",
+      format: "RTMP",
+      primaryLabel: "Full publish URL",
+      primaryUrl: `rtmp://${host}:${rtmpPort}/${appStream}`,
+      details: [
+        { label: "Server", value: `rtmp://${host}:${rtmpPort}/${appName}` },
+        { label: "Stream key", value: streamKey }
+      ]
+    },
+    {
+      key: "srt",
+      format: "SRT",
+      primaryLabel: "Full publish URL",
+      primaryUrl: `srt://${host}:${srtPort}?streamid=#!::r=${appStream},m=publish`,
+      details: [
+        { label: "Listener", value: `srt://${host}:${srtPort}` },
+        { label: "Stream ID", value: `#!::r=${appStream},m=publish` }
+      ]
+    }
+  ];
+
+  async function copyValue(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((current) => (current === key ? null : current));
+      }, 1400);
+    } catch {
+      // no-op
+    }
+  }
+
   return (
-    <section className="panel">
+    <section className="panel settings-panel">
       <h2>Settings</h2>
-      <div className="settings-item">
-        <div>Backend API URL</div>
-        <code>{import.meta.env.VITE_BACKEND_API_URL || "http://localhost:8000"}</code>
+      <div className="settings-meta-grid">
+        <div className="settings-item">
+          <div className="settings-item-label">Backend API URL</div>
+          <code>{backendUrl}</code>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-label">SRS HTTP Base</div>
+          <code>{httpBase}</code>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-label">SRS WebRTC Base</div>
+          <code>{webrtcBase}</code>
+        </div>
+      </div>
+
+      <h3 className="subhead">Ingest URLs</h3>
+      <div className="settings-table-wrap">
+        <table className="table settings-url-table">
+          <thead>
+            <tr>
+              <th>Format</th>
+              <th>URL</th>
+              <th>Publisher Fields</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ingestFormats.map((item) => (
+              <tr key={item.key}>
+                <td>
+                  <span className="health health-green">{item.format}</span>
+                </td>
+                <td>
+                  <div className="settings-url-stack">
+                    <span className="settings-item-label">{item.primaryLabel}</span>
+                    <div className="settings-copy-row">
+                      <code>{item.primaryUrl}</code>
+                      <button className="btn-xs" onClick={() => void copyValue(item.key, item.primaryUrl)}>
+                        {copiedKey === item.key ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div className="settings-url-stack">
+                    {item.details.map((detail) => (
+                      <div className="settings-detail-row" key={detail.label}>
+                        <span>{detail.label}</span>
+                        <code>{detail.value}</code>
+                      </div>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

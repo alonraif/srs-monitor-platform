@@ -898,8 +898,79 @@ textarea {
 }
 
 .settings-item {
+  border: 1px solid #1f3247;
+  border-radius: 6px;
+  background: #101c2f;
+  padding: 10px;
   display: grid;
   gap: 8px;
+  min-width: 0;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-item-label {
+  color: #88a4c0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.settings-table-wrap {
+  overflow-x: auto;
+}
+
+.settings-url-table {
+  min-width: 860px;
+}
+
+.settings-url-table th:first-child,
+.settings-url-table td:first-child {
+  width: 110px;
+}
+
+.settings-url-table th:nth-child(2),
+.settings-url-table td:nth-child(2) {
+  width: 45%;
+}
+
+.settings-url-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-url-table code,
+.settings-item code {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.settings-detail-row {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-detail-row span {
+  color: #88a4c0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
 }
 
 .events-list {
@@ -1013,6 +1084,7 @@ textarea {
   .form-grid,
   .expected-form-grid,
   .multi-grid,
+  .settings-meta-grid,
   .cards-lg,
   .cards-sm {
     grid-template-columns: 1fr;
