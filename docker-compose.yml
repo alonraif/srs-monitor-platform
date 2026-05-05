@@ -8,6 +8,7 @@ services:
       - "${SRS_RTMP_PORT:-1935}:1935"
       - "${SRS_HTTP_PORT:-8080}:8080"
       - "${SRS_API_PORT:-1985}:1985"
+      - "8000:8000/udp"
       - "${SRS_SRT_PORT:-10080}:10080/udp"
     volumes:
       - ./srs/srs.conf:/usr/local/srs/conf/srs.conf:ro
@@ -29,6 +30,7 @@ services:
       SRS_API_TIMEOUT_SECONDS: "${SRS_API_TIMEOUT_SECONDS:-2.5}"
       SRS_PUBLIC_HTTP_BASE_URL: "${SRS_PUBLIC_HTTP_BASE_URL:-http://localhost:8080}"
       SRS_PUBLIC_WEBRTC_BASE_URL: "${SRS_PUBLIC_WEBRTC_BASE_URL:-webrtc://localhost}"
+      PREVIEW_PREFERRED_PROTOCOL: "${PREVIEW_PREFERRED_PROTOCOL:-hls}"
       PREVIEW_PUBLIC_BASE_URL: "${PREVIEW_PUBLIC_BASE_URL:-http://localhost:8001}"
       PREVIEW_SERVICE_URL: "${PREVIEW_SERVICE_URL:-http://preview-service:8001}"
       CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
@@ -58,6 +60,7 @@ services:
       VITE_SRS_SRT_PORT: "${VITE_SRS_SRT_PORT:-${SRS_SRT_PORT:-10080}}"
       VITE_SRS_PUBLIC_HTTP_BASE_URL: "${VITE_SRS_PUBLIC_HTTP_BASE_URL:-${SRS_PUBLIC_HTTP_BASE_URL:-http://localhost:8080}}"
       VITE_SRS_PUBLIC_WEBRTC_BASE_URL: "${VITE_SRS_PUBLIC_WEBRTC_BASE_URL:-${SRS_PUBLIC_WEBRTC_BASE_URL:-webrtc://localhost}}"
+      VITE_SRS_WEBRTC_API_BASE_URL: "${VITE_SRS_WEBRTC_API_BASE_URL:-http://localhost:${SRS_API_PORT:-1985}}"
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:

@@ -38,6 +38,7 @@ class Settings(BaseModel):
     srs_public_http_base_url: str = getenv("SRS_PUBLIC_HTTP_BASE_URL", "http://localhost:8080")
     srs_internal_http_base_url: str = getenv("SRS_INTERNAL_HTTP_BASE_URL", "http://srs:8080")
     srs_public_webrtc_base_url: str = getenv("SRS_PUBLIC_WEBRTC_BASE_URL", "webrtc://localhost")
+    preview_preferred_protocol: str = getenv("PREVIEW_PREFERRED_PROTOCOL", "hls")
     preview_public_base_url: str = getenv("PREVIEW_PUBLIC_BASE_URL", "http://localhost:8001")
     preview_service_url: str = getenv("PREVIEW_SERVICE_URL", "http://preview-service:8001")
     cors_allow_origins: list[str] = _env_list(

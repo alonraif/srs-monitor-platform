@@ -659,18 +659,19 @@ textarea {
   height: 100%;
   min-height: 0;
   align-content: start;
+  grid-auto-rows: max-content;
 }
 
 .mv-grid.solo-mode {
   position: relative;
 }
 
-.mv-grid.type-1x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.mv-grid.type-1x1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-.mv-grid.type-2x3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.mv-grid.type-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.mv-grid.type-3x3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.mv-grid.type-4x4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mv-grid.type-1x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(1, minmax(0, 1fr)); }
+.mv-grid.type-1x1 { grid-template-columns: repeat(1, minmax(0, 1fr)); grid-template-rows: repeat(1, minmax(0, 1fr)); }
+.mv-grid.type-2x3 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.mv-grid.type-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.mv-grid.type-3x3 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+.mv-grid.type-4x4 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); }
 .mv-grid.type-5x5 { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(90px, 1fr)); }
 .mv-grid.type-1\+5 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(120px, 1fr)); }
 .mv-grid.type-1\+7 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(100px, 1fr)); }
@@ -680,11 +681,23 @@ textarea {
 .mv-tile {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+  container-type: inline-size;
+  container-name: tile;
   border: 2px solid #2a3f56;
   border-radius: 10px;
   background: #07101a;
   min-height: 0;
   aspect-ratio: 16 / 9;
+}
+
+/* Dense grid presets should honor row tracks to prevent tile overlap. */
+.mv-grid.type-2x2 .mv-tile,
+.mv-grid.type-3x3 .mv-tile,
+.mv-grid.type-4x4 .mv-tile {
+  aspect-ratio: auto;
+  height: 100%;
 }
 
 .mv-tile.hidden {
@@ -769,8 +782,13 @@ textarea {
   background: rgba(6, 12, 19, 0.75);
   border: 1px solid #28435e;
   border-radius: 4px;
-  font-size: 0.74rem;
-  padding: 2px 6px;
+  font-size: clamp(0.46rem, 1.2cqi, 0.82rem);
+  padding: clamp(2px, 0.9cqi, 6px) clamp(4px, 1.4cqi, 8px);
+  white-space: nowrap;
+}
+
+.mv-tile.no-stream-assigned .mv-state {
+  display: none;
 }
 
 .mv-overlay {
@@ -779,16 +797,42 @@ textarea {
   right: 0;
   bottom: 0;
   z-index: 2;
-  background: linear-gradient(180deg, rgba(2, 8, 14, 0.1), rgba(2, 8, 14, 0.8));
+  background: linear-gradient(180deg, rgba(2, 8, 14, 0.25), rgba(2, 8, 14, 0.82));
   padding: 8px;
+  max-height: calc(100% - 6px);
+  overflow-y: auto;
 }
 
 .mv-ov-head {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
+  font-size: clamp(0.68rem, 1.9cqi, 1.18rem);
   font-weight: 700;
+  line-height: 1.15;
+}
+
+.mv-ov-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mv-playback-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #2b4f71;
+  background: rgba(13, 33, 53, 0.85);
+  color: #bcd7f1;
+  font-size: clamp(0.48rem, 1.15cqi, 0.78rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .mv-alarm {
@@ -800,7 +844,8 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px 8px;
-  font-size: 0.68rem;
+  font-size: clamp(0.58rem, 1.45cqi, 0.95rem);
+  line-height: 1.15;
   color: #c0d2e6;
 }
 
@@ -814,8 +859,32 @@ textarea {
 }
 
 .mv-controls button {
-  padding: 4px 6px;
-  font-size: 0.72rem;
+  padding: clamp(2px, 1cqi, 8px) clamp(5px, 1.8cqi, 11px);
+  font-size: clamp(0.52rem, 1.25cqi, 0.9rem);
+}
+
+@container tile (max-width: 520px) {
+  .mv-overlay {
+    padding: 6px;
+  }
+
+  .mv-ov-head {
+    font-size: clamp(0.56rem, 1.4cqi, 0.9rem);
+  }
+
+  .mv-meta {
+    font-size: clamp(0.48rem, 1.15cqi, 0.78rem);
+  }
+
+  .mv-controls {
+    gap: 4px;
+  }
+}
+
+@container tile (max-width: 340px) {
+  .mv-controls button {
+    border-radius: 8px;
+  }
 }
 
 .mv-alerts-drawer {

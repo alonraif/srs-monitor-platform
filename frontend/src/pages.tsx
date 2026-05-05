@@ -64,13 +64,12 @@ function buildVlcUrl(stream: Stream): string {
   const outputs = stream.outputs;
   if (outputs) {
     const preferred = outputs.hls || outputs.flv || outputs.httpflv || outputs.srt || outputs.rtmp;
-    if (preferred) return preferred;
+    const normalizedPreferred = normalizePlaybackUrl(preferred);
+    if (normalizedPreferred) return normalizedPreferred;
   }
 
-  const base =
-    (import.meta.env.VITE_SRS_PUBLIC_HTTP_BASE_URL as string | undefined) ||
-    `http://${window.location.hostname}:8080`;
   const host = window.location.hostname;
+  const base = resolveSrsHttpBaseUrl(host);
   const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
   const proto = String(stream.protocol || "").toLowerCase();
 
@@ -106,16 +105,57 @@ function resolveBackendUrlForDisplay(host: string): string {
   const fallback = `${window.location.protocol}//${host}:8000`;
   const configured = frontendEnv("VITE_BACKEND_API_URL", fallback).trim();
   try {
-    const parsed = new URL(configured);
+    const parsed = new URL(configured, fallback);
+    if (!parsed.hostname) {
+      return fallback;
+    }
     const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
     const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(host);
     if (isLocalhost && isRemoteBrowser) {
       parsed.hostname = host;
       return parsed.toString().replace(/\/$/, "");
     }
-    return configured.replace(/\/$/, "");
+    return parsed.toString().replace(/\/$/, "");
   } catch {
-    return configured.replace(/\/$/, "");
+    return fallback;
+  }
+}
+
+function resolveSrsHttpBaseUrl(host: string): string {
+  const fallback = `${window.location.protocol}//${host}:8080`;
+  const configured = frontendEnv("VITE_SRS_PUBLIC_HTTP_BASE_URL", fallback).trim();
+  try {
+    const parsed = new URL(configured, fallback);
+    if (!parsed.hostname) {
+      return fallback;
+    }
+    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(host);
+    if (isLocalhost && isRemoteBrowser) {
+      parsed.hostname = host;
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizePlaybackUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const host = window.location.hostname;
+  const base = `${window.location.protocol}//${host}`;
+  try {
+    const parsed = new URL(trimmed, base);
+    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(host);
+    if (isLocalhost && isRemoteBrowser) {
+      parsed.hostname = host;
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
   }
 }
 
@@ -123,11 +163,54 @@ function sanitizeSrtPath(value: string): string {
   return value.replace(/,m=[a-z_]+$/i, "").trim();
 }
 
+function resolveSrsRtcApiBase(rawUrl: string): string | null {
+  const configured = (import.meta.env.VITE_SRS_WEBRTC_API_BASE_URL as string | undefined)?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).toString().replace(/\/$/, "");
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const parsed = new URL(rawUrl.replace(/^webrtc:\/\//i, "http://"));
+    const apiProtocol = window.location.protocol === "https:" ? "https:" : "http:";
+    const apiHost = parsed.hostname || window.location.hostname;
+    const apiPort = (import.meta.env.VITE_SRS_API_PORT as string | undefined) || "1985";
+    return `${apiProtocol}//${apiHost}:${apiPort}`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWebRtcStreamUrl(rawUrl: string): string | null {
+  const value = (rawUrl || "").trim();
+  if (!value) return null;
+  if (value.startsWith("webrtc://")) return value;
+  try {
+    const parsed = new URL(value);
+    const proto = parsed.protocol.toLowerCase();
+    if (proto === "http:" || proto === "https:") {
+      return `webrtc://${parsed.host}${parsed.pathname}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function formatFps(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "unknown";
   const nearestInt = Math.round(value);
   if (Math.abs(value - nearestInt) <= 0.15) return String(nearestInt);
   return value.toFixed(1);
+}
+
+function playbackSourceLabel(source: PreviewResolveResponse["source"] | null | undefined): string {
+  if (source === "native_webrtc") return "WebRTC";
+  if (source === "native_hls" || source === "preview_hls") return "HLS";
+  if (source === "native_http_flv") return "FLV";
+  return "Unknown";
 }
 
 function formatHms(value: number | null | undefined): string {
@@ -1528,12 +1611,14 @@ function buildGridTiles(rows: number, cols: number): MultiviewTile[] {
 
 function TilePlayer({
   playbackUrl,
+  playbackSource,
   muted,
   scanType,
   protocol,
   children
 }: {
   playbackUrl: string | null;
+  playbackSource?: PreviewResolveResponse["source"];
   muted: boolean;
   scanType: "progressive" | "interlaced" | "unknown";
   protocol: string | null | undefined;
@@ -1600,6 +1685,7 @@ function TilePlayer({
     if (!video || !playbackUrl) return;
     let hls: { destroy: () => void } | null = null;
     let flv: { destroy: () => void; unload: () => void; detachMediaElement: () => void } | null = null;
+    let pc: RTCPeerConnection | null = null;
     let active = true;
     video.muted = muted;
     video.playsInline = true;
@@ -1607,7 +1693,40 @@ function TilePlayer({
     video.controls = false;
     const load = async () => {
       try {
-        if (playbackUrl.includes(".m3u8")) {
+        const isWebRtc = playbackSource === "native_webrtc" || playbackUrl.startsWith("webrtc://");
+        if (isWebRtc) {
+          const streamUrl = normalizeWebRtcStreamUrl(playbackUrl);
+          const apiBase = streamUrl ? resolveSrsRtcApiBase(streamUrl) : null;
+          if (!streamUrl || !apiBase) throw new Error("invalid_webrtc_url");
+          const connection = new RTCPeerConnection();
+          pc = connection;
+          connection.addTransceiver("audio", { direction: "recvonly" });
+          connection.addTransceiver("video", { direction: "recvonly" });
+          connection.ontrack = (event) => {
+            const [stream] = event.streams;
+            if (!stream || !active) return;
+            video.srcObject = stream;
+            void video.play().catch(() => undefined);
+          };
+          const offer = await connection.createOffer();
+          await connection.setLocalDescription(offer);
+          const response = await fetch(`${apiBase}/rtc/v1/play/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              api: `${apiBase}/rtc/v1/play/`,
+              streamurl: streamUrl,
+              clientip: null,
+              sdp: offer.sdp || "",
+            }),
+          });
+          if (!response.ok) throw new Error(`webrtc_offer_failed_${response.status}`);
+          const payload = (await response.json()) as { code?: number; sdp?: string };
+          if (payload.code && payload.code !== 0) throw new Error(`webrtc_offer_error_${payload.code}`);
+          if (!payload.sdp) throw new Error("webrtc_missing_answer");
+          if (!active) return;
+          await connection.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+        } else if (playbackUrl.includes(".m3u8")) {
           if (Hls.isSupported()) {
             const instance = new Hls({ liveDurationInfinity: true, lowLatencyMode: true });
             instance.loadSource(playbackUrl);
@@ -1622,7 +1741,7 @@ function TilePlayer({
             const player = flvjs.createPlayer({ type: "flv", url: playbackUrl });
             player.attachMediaElement(video);
             player.load();
-            player.play();
+            void Promise.resolve(player.play()).catch(() => undefined);
             flv = player;
           } else {
             video.src = playbackUrl;
@@ -1646,10 +1765,15 @@ function TilePlayer({
         flv.detachMediaElement();
         flv.destroy();
       }
+      if (pc) {
+        pc.ontrack = null;
+        pc.close();
+      }
+      video.srcObject = null;
       video.removeAttribute("src");
       video.load();
     };
-  }, [playbackUrl]);
+  }, [playbackUrl, playbackSource]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
@@ -1809,15 +1933,28 @@ export function MultiviewerPage() {
       return;
     }
     const bootstrap = async () => {
-      const created = await api.createMultiviewLayout({
-        name: "2x2",
-        type: "2x2",
-        is_default: true,
-        tiles: buildGridTiles(2, 2),
-      });
-      setLocalLayouts([created]);
-      setSelectedLayoutId(created.id);
-      setBootstrapDone(true);
+      try {
+        const created = await api.createMultiviewLayout({
+          name: "2x2",
+          type: "2x2",
+          is_default: true,
+          tiles: buildGridTiles(2, 2),
+        });
+        setLocalLayouts([created]);
+        setSelectedLayoutId(created.id);
+      } catch {
+        const refreshed = await api.getMultiviewLayouts();
+        if (refreshed.layouts.length > 0) {
+          setLocalLayouts(refreshed.layouts);
+          const preferred =
+            refreshed.layouts.find((layout) => layout.is_default) ||
+            refreshed.layouts.find((layout) => layout.name === "2x2") ||
+            refreshed.layouts[0];
+          setSelectedLayoutId(preferred.id);
+        }
+      } finally {
+        setBootstrapDone(true);
+      }
     };
     void bootstrap();
   }, [bootstrapDone, live.loading, effectiveData, localLayouts, serverLayouts]);
@@ -1870,7 +2007,13 @@ export function MultiviewerPage() {
       if (previewByStream[streamId] !== undefined) continue;
       setPreviewByStream((prev) => ({ ...prev, [streamId]: null }));
       void api.getPreviewUrl(streamId).then((result) => {
-        setPreviewByStream((prev) => ({ ...prev, [streamId]: result }));
+        setPreviewByStream((prev) => ({
+          ...prev,
+          [streamId]: {
+            ...result,
+            playback_url: normalizePlaybackUrl(result.playback_url),
+          }
+        }));
       }).catch(() => {
         setPreviewByStream((prev) => ({
           ...prev,
@@ -1898,7 +2041,7 @@ export function MultiviewerPage() {
         stream_id: streamId,
         state,
         source: "preview_hls",
-        playback_url: typeof item.preview_url === "string" ? item.preview_url : null,
+        playback_url: normalizePlaybackUrl(typeof item.preview_url === "string" ? item.preview_url : null),
         reason: typeof item.reason === "string" ? item.reason : null
       };
     }
@@ -2172,16 +2315,20 @@ export function MultiviewerPage() {
                 {playbackUrl && state === "Live" ? (
                   <TilePlayer
                     playbackUrl={playbackUrl}
+                    playbackSource={preview?.source}
                     muted={tile.muted}
                     scanType={stream?.metrics.scan_type ?? "unknown"}
                     protocol={stream?.protocol}
                   >
                     <div className="mv-state">{state}{preview?.reason ? `: ${preview.reason}` : ""}</div>
-                    <div className="mv-overlay">
-                      <div className="mv-ov-head">
-                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
-                        {alarm ? <span className="mv-alarm">ALARM</span> : null}
-                      </div>
+	                    <div className="mv-overlay">
+	                      <div className="mv-ov-head">
+	                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
+	                        <span className="mv-ov-head-right">
+	                          <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span>
+	                          {alarm ? <span className="mv-alarm">ALARM</span> : null}
+	                        </span>
+	                      </div>
                       {showUmd ? (
                         <div className="mv-meta">
                           <span>ID: {stream?.id ?? "-"}</span>
@@ -2229,11 +2376,14 @@ export function MultiviewerPage() {
                 ) : (
                   <>
                     <div className="mv-state">{state}{preview?.reason ? `: ${preview.reason}` : ""}</div>
-                    <div className="mv-overlay">
-                      <div className="mv-ov-head">
-                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
-                        {alarm ? <span className="mv-alarm">ALARM</span> : null}
-                      </div>
+	                    <div className="mv-overlay">
+	                      <div className="mv-ov-head">
+	                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
+	                        <span className="mv-ov-head-right">
+	                          <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span>
+	                          {alarm ? <span className="mv-alarm">ALARM</span> : null}
+	                        </span>
+	                      </div>
                       {showUmd ? (
                         <div className="mv-meta">
                           <span>ID: {stream?.id ?? "-"}</span>
@@ -2319,7 +2469,7 @@ export function SettingsPage() {
   const backendUrl = resolveBackendUrlForDisplay(host);
   const rtmpPort = frontendEnv("VITE_SRS_RTMP_PORT", "1935");
   const srtPort = frontendEnv("VITE_SRS_SRT_PORT", "10080");
-  const httpBase = frontendEnv("VITE_SRS_PUBLIC_HTTP_BASE_URL", `http://${host}:8080`).replace(/\/$/, "");
+  const httpBase = resolveSrsHttpBaseUrl(host);
   const webrtcBase = frontendEnv("VITE_SRS_PUBLIC_WEBRTC_BASE_URL", `webrtc://${host}`).replace(/\/$/, "");
   const ingestFormats = [
     {

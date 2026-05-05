@@ -7,6 +7,7 @@ RUN npm install
 
 COPY src ./src
 COPY index.html .
+COPY favicon.svg .
 COPY tsconfig.json .
 COPY vite.config.ts .
 

@@ -20,16 +20,19 @@ function resolveBackendUrl(): string {
   const configured = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.trim();
   if (!configured) return inferredBackendUrl;
   try {
-    const parsed = new URL(configured);
+    const parsed = new URL(configured, inferredBackendUrl);
+    if (!parsed.hostname) {
+      return inferredBackendUrl;
+    }
     const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
     const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(window.location.hostname);
     if (isLocalhost && isRemoteBrowser) {
       parsed.hostname = window.location.hostname;
       return parsed.toString().replace(/\/$/, "");
     }
-    return configured.replace(/\/$/, "");
+    return parsed.toString().replace(/\/$/, "");
   } catch {
-    return configured.replace(/\/$/, "");
+    return inferredBackendUrl;
   }
 }
 
