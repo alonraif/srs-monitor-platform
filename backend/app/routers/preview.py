@@ -101,6 +101,11 @@ async def preview_status() -> PreviewStatusResponse:
 async def preview_url(stream_id: str) -> PreviewStartResponse:
     stream = next((s for s in await _source_streams() if s.id == stream_id), None)
     if stream is None:
-        raise HTTPException(status_code=404, detail=f"Stream '{stream_id}' not found")
+        return PreviewStartResponse(
+            stream_id=stream_id,
+            state="preview_unavailable",
+            source="none",
+            reason="stream_not_found",
+        )
     resolved = await resolve_preview(stream, timeout_seconds=60)
     return _to_response(resolved)

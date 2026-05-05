@@ -38,6 +38,7 @@ function resolveBackendUrl(): string {
 
 const BASE_URL = resolveBackendUrl();
 export const LIVE_URL = `${BASE_URL}/api/live`;
+let previewUrlRouteSupported: boolean | null = null;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -85,7 +86,42 @@ export const api = {
     request<MultiviewLayout>(`/api/multiview/layouts/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteMultiviewLayout: (id: number) => request<{ deleted: boolean }>(`/api/multiview/layouts/${id}`, { method: "DELETE" }),
   setDefaultMultiviewLayout: (id: number) => request<MultiviewLayout>(`/api/multiview/layouts/${id}/set-default`, { method: "POST" }),
-  getPreviewUrl: (streamId: string) => request<PreviewResolveResponse>(`/api/preview/url/${streamId}`),
+  getPreviewUrl: async (streamId: string) => {
+    if (previewUrlRouteSupported !== false) {
+      const primary = await fetch(`${BASE_URL}/api/preview/url/${streamId}`, {
+        headers: { "Content-Type": "application/json" }
+      });
+      if (primary.ok) {
+        previewUrlRouteSupported = true;
+        return (await primary.json()) as PreviewResolveResponse;
+      }
+      if (primary.status !== 404) {
+        const text = await primary.text();
+        throw new Error(text || `Request failed with ${primary.status}`);
+      }
+      previewUrlRouteSupported = false;
+    }
+    // Compatibility fallback for older backends that don't expose /preview/url.
+    const fallback = await fetch(`${BASE_URL}/api/preview/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stream_id: streamId, inactivity_timeout_seconds: 60 })
+    });
+    if (fallback.status === 404) {
+      return {
+        stream_id: streamId,
+        state: "preview_unavailable",
+        source: "none",
+        playback_url: null,
+        reason: "stream_not_found"
+      };
+    }
+    if (!fallback.ok) {
+      const text = await fallback.text();
+      throw new Error(text || `Request failed with ${fallback.status}`);
+    }
+    return (await fallback.json()) as PreviewResolveResponse;
+  },
   startPreview: (streamId: string, inactivity_timeout_seconds = 60) =>
     request<PreviewResolveResponse>("/api/preview/start", {
       method: "POST",
