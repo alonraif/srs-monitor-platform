@@ -1,24 +1,4 @@
 services:
-  srs:
-    image: ossrs/srs:5
-    container_name: srs
-    restart: unless-stopped
-    command: ./objs/srs -c /usr/local/srs/conf/srs.conf
-    ports:
-      - "${SRS_RTMP_PORT:-1935}:1935"
-      - "${SRS_HTTP_PORT:-8080}:8080"
-      - "${SRS_API_PORT:-1985}:1985"
-      - "8000:8000/udp"
-      - "${SRS_SRT_PORT:-10080}:10080/udp"
-    volumes:
-      - ./srs/srs.conf:/usr/local/srs/conf/srs.conf:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:1985/api/v1/summaries"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
   monitor-backend:
     build:
       context: ./backend
@@ -26,9 +6,10 @@ services:
     restart: unless-stopped
     environment:
       MOCK_MODE: "${MOCK_MODE:-true}"
-      SRS_API_URL: "${SRS_API_URL:-http://srs:1985}"
+      SRS_API_URL: "${SRS_API_URL:-http://localhost:1985}"
       SRS_API_TIMEOUT_SECONDS: "${SRS_API_TIMEOUT_SECONDS:-2.5}"
       SRS_PUBLIC_HTTP_BASE_URL: "${SRS_PUBLIC_HTTP_BASE_URL:-http://localhost:8080}"
+      SRS_INTERNAL_HTTP_BASE_URL: "${SRS_INTERNAL_HTTP_BASE_URL:-http://localhost:8080}"
       SRS_PUBLIC_WEBRTC_BASE_URL: "${SRS_PUBLIC_WEBRTC_BASE_URL:-webrtc://localhost}"
       PREVIEW_PREFERRED_PROTOCOL: "${PREVIEW_PREFERRED_PROTOCOL:-webrtc}"
       PREVIEW_FORCE_REWRAP: "${PREVIEW_FORCE_REWRAP:-false}"
@@ -41,8 +22,6 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - monitor_backend_data:/data
-    depends_on:
-      - srs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -79,13 +58,11 @@ services:
     container_name: preview-service
     restart: unless-stopped
     environment:
-      SRS_API_URL: "${SRS_API_URL:-http://srs:1985}"
+      SRS_API_URL: "${SRS_API_URL:-http://localhost:1985}"
     ports:
       - "${PREVIEW_PORT:-8001}:8001"
     volumes:
       - preview_data:/var/preview
-    depends_on:
-      - srs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s

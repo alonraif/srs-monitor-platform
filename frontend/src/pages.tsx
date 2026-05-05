@@ -61,35 +61,32 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function buildVlcUrl(stream: Stream): string {
+  const host = window.location.hostname;
+  const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
+  const proto = String(stream.protocol || "").toLowerCase();
+  const base = resolveSrsHttpBaseUrl(host);
+
+  // For player playback, prefer remux outputs over raw SRT pull.
+  // This avoids decoder join issues seen with direct SRT request mode.
+  const flvUrl = `${base.replace(/\/$/, "")}/${appKey}.flv`;
+  const hlsUrl = `${base.replace(/\/$/, "")}/${appKey}.m3u8`;
+
   const outputs = stream.outputs;
   if (outputs) {
-    const preferred = outputs.hls || outputs.flv || outputs.httpflv || outputs.srt || outputs.rtmp;
+    const preferred = outputs.hls || outputs.flv || outputs.httpflv || outputs.rtmp || outputs.srt;
     const normalizedPreferred = normalizePlaybackUrl(preferred);
     if (normalizedPreferred) return normalizedPreferred;
   }
 
-  const host = window.location.hostname;
-  const base = resolveSrsHttpBaseUrl(host);
-  const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
-  const proto = String(stream.protocol || "").toLowerCase();
-
-  if (proto === "srt") {
-    const srtPort = (import.meta.env.VITE_SRS_SRT_PORT as string | undefined) || "10080";
-    const shortStreamId = sanitizeSrtPath(stream.stream_key || appKey);
-    const query = new URLSearchParams({
-      streamid: shortStreamId,
-      mode: "caller",
-    });
-    return `srt://${host}:${srtPort}?${query.toString()}`;
-  }
+  if (proto === "srt") return flvUrl;
   if (proto === "rtmp") {
     const rtmpPort = (import.meta.env.VITE_SRS_RTMP_PORT as string | undefined) || "1935";
     return `rtmp://${host}:${rtmpPort}/${appKey}`;
   }
   if (proto === "hls") {
-    return `${base.replace(/\/$/, "")}/${appKey}.m3u8`;
+    return hlsUrl;
   }
-  return `${base.replace(/\/$/, "")}/${appKey}.flv`;
+  return flvUrl;
 }
 
 function publicHost(): string {
@@ -144,10 +141,11 @@ function normalizePlaybackUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
+  const sanitized = trimmed.replace(/:(\d+)\}\?/g, ":$1?");
   const host = window.location.hostname;
   const base = `${window.location.protocol}//${host}`;
   try {
-    const parsed = new URL(trimmed, base);
+    const parsed = new URL(sanitized, base);
     const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
     const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(host);
     if (isLocalhost && isRemoteBrowser) {
@@ -155,7 +153,7 @@ function normalizePlaybackUrl(url: string | null | undefined): string | null {
     }
     return parsed.toString();
   } catch {
-    return trimmed;
+    return sanitized;
   }
 }
 
@@ -197,6 +195,14 @@ function normalizeWebRtcStreamUrl(rawUrl: string): string | null {
     return null;
   }
   return null;
+}
+
+function toFlvVariant(url: string): string | null {
+  const value = (url || "").trim();
+  if (!value) return null;
+  if (value.includes(".flv")) return value;
+  if (!value.includes(".m3u8")) return null;
+  return value.replace(/\.m3u8(\?.*)?$/i, ".flv$1");
 }
 
 function formatFps(value: number | null | undefined): string {
@@ -1611,14 +1617,12 @@ function buildGridTiles(rows: number, cols: number): MultiviewTile[] {
 
 function TilePlayer({
   playbackUrl,
-  playbackSource,
   muted,
   scanType,
   protocol,
   children
 }: {
   playbackUrl: string | null;
-  playbackSource?: PreviewResolveResponse["source"];
   muted: boolean;
   scanType: "progressive" | "interlaced" | "unknown";
   protocol: string | null | undefined;
@@ -1628,7 +1632,9 @@ function TilePlayer({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [boxSize, setBoxSize] = useState<{ width: number; height: number } | null>(null);
-  const shouldDeinterlace = scanType !== "progressive";
+  // Only deinterlace when we are sure the feed is interlaced.
+  // Treating "unknown" as interlaced is expensive in multiview and can cause stalls.
+  const shouldDeinterlace = scanType === "interlaced";
   const aggressiveSrtDeinterlace = scanType === "interlaced" && String(protocol || "").toUpperCase() === "SRT";
 
   useEffect(() => {
@@ -1686,6 +1692,7 @@ function TilePlayer({
     let hls: { destroy: () => void } | null = null;
     let flv: { destroy: () => void; unload: () => void; detachMediaElement: () => void } | null = null;
     let pc: RTCPeerConnection | null = null;
+    let onStall: (() => void) | null = null;
     let active = true;
     video.muted = muted;
     video.playsInline = true;
@@ -1693,7 +1700,7 @@ function TilePlayer({
     video.controls = false;
     const load = async () => {
       try {
-        const isWebRtc = playbackSource === "native_webrtc" || playbackUrl.startsWith("webrtc://");
+        const isWebRtc = playbackUrl.startsWith("webrtc://");
         if (isWebRtc) {
           const streamUrl = normalizeWebRtcStreamUrl(playbackUrl);
           const apiBase = streamUrl ? resolveSrsRtcApiBase(streamUrl) : null;
@@ -1727,8 +1734,63 @@ function TilePlayer({
           if (!active) return;
           await connection.setRemoteDescription({ type: "answer", sdp: payload.sdp });
         } else if (playbackUrl.includes(".m3u8")) {
-          if (Hls.isSupported()) {
-            const instance = new Hls({ liveDurationInfinity: true, lowLatencyMode: true });
+          const flvVariant = toFlvVariant(playbackUrl);
+          if (flvVariant && flvjs.isSupported()) {
+            const player = flvjs.createPlayer(
+              { type: "flv", url: flvVariant, isLive: true },
+              {
+                enableWorker: true,
+                enableStashBuffer: true,
+                stashInitialSize: 384,
+                autoCleanupSourceBuffer: true,
+                autoCleanupMaxBackwardDuration: 20,
+                autoCleanupMinBackwardDuration: 10,
+                lazyLoad: false,
+              }
+            );
+            player.attachMediaElement(video);
+            player.load();
+            void Promise.resolve(player.play()).catch(() => undefined);
+            flv = player;
+          } else if (Hls.isSupported()) {
+            const instance = new Hls({
+              liveDurationInfinity: true,
+              // Favor continuity in multiview over minimum latency.
+              lowLatencyMode: false,
+              maxBufferLength: 20,
+              backBufferLength: 8,
+              liveSyncDurationCount: 5,
+              liveMaxLatencyDurationCount: 12,
+            });
+            instance.on(Hls.Events.MANIFEST_PARSED, () => {
+              void video.play().catch(() => undefined);
+            });
+            instance.on(Hls.Events.ERROR, (_event, data) => {
+              if (!active) return;
+              if (data?.fatal) {
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                  instance.startLoad();
+                  return;
+                }
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                  instance.recoverMediaError();
+                  return;
+                }
+                instance.destroy();
+              }
+            });
+            onStall = () => {
+              if (!active) return;
+              const buffered = video.buffered;
+              if (!buffered || buffered.length === 0) return;
+              const end = buffered.end(buffered.length - 1);
+              if (end - video.currentTime > 0.75) {
+                video.currentTime = Math.max(video.currentTime, end - 0.2);
+                void video.play().catch(() => undefined);
+              }
+            };
+            video.addEventListener("stalled", onStall);
+            video.addEventListener("waiting", onStall);
             instance.loadSource(playbackUrl);
             instance.attachMedia(video);
             hls = instance;
@@ -1769,11 +1831,15 @@ function TilePlayer({
         pc.ontrack = null;
         pc.close();
       }
+      if (onStall) {
+        video.removeEventListener("stalled", onStall);
+        video.removeEventListener("waiting", onStall);
+      }
       video.srcObject = null;
       video.removeAttribute("src");
       video.load();
     };
-  }, [playbackUrl, playbackSource]);
+  }, [playbackUrl]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
@@ -2315,7 +2381,6 @@ export function MultiviewerPage() {
                 {playbackUrl && state === "Live" ? (
                   <TilePlayer
                     playbackUrl={playbackUrl}
-                    playbackSource={preview?.source}
                     muted={tile.muted}
                     scanType={stream?.metrics.scan_type ?? "unknown"}
                     protocol={stream?.protocol}

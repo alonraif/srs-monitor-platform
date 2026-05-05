@@ -235,6 +235,20 @@ ffplay "srt://localhost:10080?streamid=#!::r=live/main-program,m=request"
 - Platform streams UI: `http://localhost:3000/streams`
 - Backend health: `http://localhost:8000/api/health`
 
+### 3.1) A/B Test: SRT->RTMP vs Direct RTMP
+
+Use this to isolate SRS `srt_to_rtmp` timestamp behavior.
+
+Path A (SRT->RTMP remux, default vhost):
+- Publish SRT with streamid host/app/stream: `#!::h=live/drone-x,m=publish`
+- Playback HLS: `http://localhost:8080/live/drone-x.m3u8`
+
+Path B (direct RTMP ingest, no SRT remux path):
+- Publish RTMP: `rtmp://localhost:1935/live/drone-x?vhost=ab_rtmp_direct`
+- Playback HLS: `http://localhost:8080/ab_rtmp_direct/live/drone-x.m3u8`
+
+If warnings appear only on Path A, root cause is in the SRS SRT->RTMP path, not encoder output.
+
 ### 4) Preview/Rewrap Logic (No Transcoding)
 
 When preview is requested, backend resolves by configured preference:

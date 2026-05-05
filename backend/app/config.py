@@ -29,6 +29,15 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item for item in items if item]
 
 
+def _env_regex(name: str, default: str) -> str:
+    value = getenv(name)
+    if value is None:
+        return default
+    # .env values are commonly over-escaped (e.g. "\\d" instead of "\d").
+    # Normalize to avoid unexpected CORS regex mismatches.
+    return value.replace("\\\\", "\\")
+
+
 class Settings(BaseModel):
     service_name: str = "monitor-backend"
     version: str = "0.1.0"
@@ -38,14 +47,15 @@ class Settings(BaseModel):
     srs_public_http_base_url: str = getenv("SRS_PUBLIC_HTTP_BASE_URL", "http://localhost:8080")
     srs_internal_http_base_url: str = getenv("SRS_INTERNAL_HTTP_BASE_URL", "http://srs:8080")
     srs_public_webrtc_base_url: str = getenv("SRS_PUBLIC_WEBRTC_BASE_URL", "webrtc://localhost")
-    preview_preferred_protocol: str = getenv("PREVIEW_PREFERRED_PROTOCOL", "hls")
+    preview_preferred_protocol: str = getenv("PREVIEW_PREFERRED_PROTOCOL", "webrtc")
+    preview_force_rewrap: bool = _env_bool("PREVIEW_FORCE_REWRAP", False)
     preview_public_base_url: str = getenv("PREVIEW_PUBLIC_BASE_URL", "http://localhost:8001")
     preview_service_url: str = getenv("PREVIEW_SERVICE_URL", "http://preview-service:8001")
     cors_allow_origins: list[str] = _env_list(
         "CORS_ALLOW_ORIGINS",
         ["http://localhost:3000", "http://127.0.0.1:3000"],
     )
-    cors_allow_origin_regex: str = getenv(
+    cors_allow_origin_regex: str = _env_regex(
         "CORS_ALLOW_ORIGIN_REGEX",
         r"^https?://(localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)(:\\d+)?$",
     )

@@ -119,6 +119,7 @@ async def _is_hls_reachable(url: str | None) -> bool:
 async def resolve_preview(stream: IngestStream, timeout_seconds: int) -> PreviewResolution:
     settings = get_settings()
     prefer_webrtc = settings.preview_preferred_protocol.strip().lower() == "webrtc"
+    force_rewrap = settings.preview_force_rewrap
     native_webrtc, native_hls, native_flv = _native_outputs(stream)
     native_webrtc = _publicize_native(native_webrtc, "webrtc")
     native_hls = _publicize_native(native_hls, "http")
@@ -135,20 +136,21 @@ async def resolve_preview(stream: IngestStream, timeout_seconds: int) -> Preview
         native_hls = fb_hls
         native_flv = fb_flv
 
-    if prefer_webrtc:
-        if native_webrtc:
-            return PreviewResolution(stream.id, "available", "native_webrtc", native_webrtc)
-        if native_hls and await _is_hls_reachable(native_hls):
-            return PreviewResolution(stream.id, "available", "native_hls", native_hls)
-        if native_flv:
-            return PreviewResolution(stream.id, "available", "native_http_flv", native_flv)
-    else:
-        if native_hls and await _is_hls_reachable(native_hls):
-            return PreviewResolution(stream.id, "available", "native_hls", native_hls)
-        if native_flv:
-            return PreviewResolution(stream.id, "available", "native_http_flv", native_flv)
-        if native_webrtc:
-            return PreviewResolution(stream.id, "available", "native_webrtc", native_webrtc)
+    if not force_rewrap:
+        if prefer_webrtc:
+            if native_webrtc:
+                return PreviewResolution(stream.id, "available", "native_webrtc", native_webrtc)
+            if native_hls and await _is_hls_reachable(native_hls):
+                return PreviewResolution(stream.id, "available", "native_hls", native_hls)
+            if native_flv:
+                return PreviewResolution(stream.id, "available", "native_http_flv", native_flv)
+        else:
+            if native_hls and await _is_hls_reachable(native_hls):
+                return PreviewResolution(stream.id, "available", "native_hls", native_hls)
+            if native_flv:
+                return PreviewResolution(stream.id, "available", "native_http_flv", native_flv)
+            if native_webrtc:
+                return PreviewResolution(stream.id, "available", "native_webrtc", native_webrtc)
 
     input_url, input_protocol = _derive_rewrap_input(stream)
     if not input_url or not input_protocol:
