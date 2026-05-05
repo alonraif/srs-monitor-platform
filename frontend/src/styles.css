@@ -200,6 +200,12 @@ h2 {
   color: #e3f2ff;
 }
 
+.metric-reason {
+  color: #88a4c0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .health {
   border: 1px solid #2a3e56;
   border-radius: 999px;

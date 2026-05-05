@@ -56,6 +56,35 @@ def _scan_from_field_order(field_order: str | None) -> str:
     return "unknown"
 
 
+def _normalize_fps_value(value: float | None) -> float | None:
+    if value is None or value <= 0:
+        return None
+
+    common = [23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 60.0]
+
+    def _snap(v: float) -> float | None:
+        for target in common:
+            if abs(v - target) <= 0.75:
+                return target
+        return None
+
+    snapped = _snap(value)
+    if snapped is not None:
+        return snapped
+
+    # Some remux/probe paths report doubled cadence (for example 120 or 62.5)
+    # for a 60-ish stream. Try half-rate and snap to known broadcast rates.
+    if value > 60:
+        halved = value / 2.0
+        snapped_half = _snap(halved)
+        if snapped_half is not None:
+            return snapped_half
+
+    # If it does not map to a plausible common cadence, prefer unknown over
+    # displaying a misleading value.
+    return None
+
+
 def _probe_urls(stream: IngestStream) -> list[str]:
     settings = get_settings()
     app = stream.app
@@ -161,21 +190,29 @@ async def enrich_stream(stream: IngestStream) -> IngestStream:
         payload = result.get("payload")
         streams = payload.get("streams") if isinstance(payload, dict) else None
         first = streams[0] if isinstance(streams, list) and streams and isinstance(streams[0], dict) else {}
-        fps = _fps_from_ratio(first.get("avg_frame_rate")) or _fps_from_ratio(first.get("r_frame_rate"))
+        avg_fps = _normalize_fps_value(_fps_from_ratio(first.get("avg_frame_rate")))
+        real_fps = _normalize_fps_value(_fps_from_ratio(first.get("r_frame_rate")))
+        # Prefer avg when it is sane; otherwise fall back to real frame rate.
+        fps = avg_fps if avg_fps is not None else real_fps
         scan_type = _scan_from_field_order(first.get("field_order"))
         best_debug["selected_url"] = url
         best_debug["video_stream"] = first
         break
 
+    # Prevent UI FPS flapping: if this probe cycle cannot derive a sane FPS,
+    # keep the previously known-good cached FPS instead of resetting to None.
+    cached_fps = cached.fps if cached is not None else None
+    stable_fps = fps if fps is not None else cached_fps
+
     _CACHE[cache_key] = _CacheEntry(
         expires_at=now + settings.ffprobe_cache_ttl_seconds,
-        fps=fps,
+        fps=stable_fps,
         scan_type=scan_type,
         debug=best_debug,
     )
 
-    if _is_missing_fps(stream.metrics.fps) and fps is not None:
-        stream.metrics.fps = fps
+    if _is_missing_fps(stream.metrics.fps) and stable_fps is not None:
+        stream.metrics.fps = stable_fps
     if stream.metrics.scan_type == "unknown" and scan_type in {"progressive", "interlaced"}:
         stream.metrics.scan_type = scan_type
     stream.debug = stream.debug or {}

@@ -12,7 +12,8 @@ import type {
   MultiviewLayoutType,
   MultiviewTile,
   PreviewResolveResponse,
-  Stream
+  Stream,
+  SystemResponse
 } from "./types";
 
 function streamMatchTokens(stream: Stream): Set<string> {
@@ -101,6 +102,23 @@ function frontendEnv(name: string, fallback: string): string {
   return value && value.trim() ? value.trim() : fallback;
 }
 
+function resolveBackendUrlForDisplay(host: string): string {
+  const fallback = `${window.location.protocol}//${host}:8000`;
+  const configured = frontendEnv("VITE_BACKEND_API_URL", fallback).trim();
+  try {
+    const parsed = new URL(configured);
+    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(host);
+    if (isLocalhost && isRemoteBrowser) {
+      parsed.hostname = host;
+      return parsed.toString().replace(/\/$/, "");
+    }
+    return configured.replace(/\/$/, "");
+  } catch {
+    return configured.replace(/\/$/, "");
+  }
+}
+
 function sanitizeSrtPath(value: string): string {
   return value.replace(/,m=[a-z_]+$/i, "").trim();
 }
@@ -118,6 +136,59 @@ function formatHms(value: number | null | undefined): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function metricSeverity(value: number): "healthy" | "warning" | "critical" {
+  if (value >= 95) return "critical";
+  if (value >= 80) return "warning";
+  return "healthy";
+}
+
+function explainOverallStatus(system: SystemResponse): string {
+  if (system.host.status === "healthy") return "All backend host checks are within normal range.";
+  if (system.host.status === "unknown") return "Backend health details are currently unavailable.";
+  if (system.host.status === "srs_unreachable") return "SRS API is unreachable.";
+
+  const reasons: string[] = [];
+  const cpuSeverity = metricSeverity(system.host.cpu_percent);
+  const memorySeverity = metricSeverity(system.host.memory.used);
+  const diskSeverity = metricSeverity(system.host.disk.used);
+
+  if (cpuSeverity !== "healthy") reasons.push(`CPU ${system.host.cpu_percent.toFixed(1)}%`);
+  if (memorySeverity !== "healthy") reasons.push(`Memory ${system.host.memory.used.toFixed(1)}%`);
+  if (diskSeverity !== "healthy") reasons.push(`Disk ${system.host.disk.used.toFixed(1)}%`);
+
+  if (reasons.length > 0) return `Triggered by: ${reasons.join(", ")}.`;
+  return "At least one backend health check is degraded.";
+}
+
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to legacy copy
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  } finally {
+    textarea.remove();
+  }
+  return copied;
 }
 
 function BitrateChart({ points }: { points: Array<{ ts: number; bitrate: number }> }) {
@@ -207,6 +278,7 @@ export function DashboardPage() {
   const [dashboard, streams, alarms] = live.data;
   const system = systemFeed.data;
   const activeAlarms = alarms.alarms.filter((alarm) => alarm.status !== "resolved");
+  const overallStatusReason = explainOverallStatus(system);
 
   const viewers = streams.streams.reduce((sum, stream) => sum + stream.viewers_current, 0);
   const inboundBitrateMbps =
@@ -240,16 +312,12 @@ export function DashboardPage() {
   };
 
   const copyToClipboard = async (text: string, streamId?: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (streamId) {
-        setCopiedUrlStreamId(streamId);
-        window.setTimeout(() => {
-          setCopiedUrlStreamId((current) => (current === streamId ? null : current));
-        }, 1500);
-      }
-    } catch {
-      // no-op
+    const copied = await copyText(text);
+    if (copied && streamId) {
+      setCopiedUrlStreamId(streamId);
+      window.setTimeout(() => {
+        setCopiedUrlStreamId((current) => (current === streamId ? null : current));
+      }, 1500);
     }
   };
 
@@ -265,6 +333,7 @@ export function DashboardPage() {
             </div>
             <div className="metric-value">monitor-backend</div>
             <div className="metric-title">Host: {system.host.hostname}</div>
+            <div className="metric-reason">{overallStatusReason}</div>
           </article>
           <article className="metric-card">
             <div className="metric-head">
@@ -395,14 +464,12 @@ export function StreamsPage() {
   const [expectedActionError, setExpectedActionError] = useState<string | null>(null);
 
   const copyStreamUrl = async (stream: Stream) => {
-    try {
-      await navigator.clipboard.writeText(buildVlcUrl(stream));
+    const copied = await copyText(buildVlcUrl(stream));
+    if (copied) {
       setCopiedStreamId(stream.id);
       window.setTimeout(() => {
         setCopiedStreamId((current) => (current === stream.id ? null : current));
       }, 1400);
-    } catch {
-      // no-op
     }
   };
 
@@ -817,12 +884,10 @@ export function StreamDetailPage() {
   const expected = resolveExpectedForStream(stream, expectedResponse.streams);
 
   const onCopyKey = async () => {
-    try {
-      await navigator.clipboard.writeText(buildVlcUrl(stream));
+    const copied = await copyText(buildVlcUrl(stream));
+    if (copied) {
       setCopiedKey(true);
       window.setTimeout(() => setCopiedKey(false), 1400);
-    } catch {
-      // no-op
     }
   };
 
@@ -2251,7 +2316,7 @@ export function SettingsPage() {
   const appName = "live";
   const streamKey = "<stream-key>";
   const appStream = `${appName}/${streamKey}`;
-  const backendUrl = frontendEnv("VITE_BACKEND_API_URL", "http://localhost:8000");
+  const backendUrl = resolveBackendUrlForDisplay(host);
   const rtmpPort = frontendEnv("VITE_SRS_RTMP_PORT", "1935");
   const srtPort = frontendEnv("VITE_SRS_SRT_PORT", "10080");
   const httpBase = frontendEnv("VITE_SRS_PUBLIC_HTTP_BASE_URL", `http://${host}:8080`).replace(/\/$/, "");
@@ -2280,14 +2345,12 @@ export function SettingsPage() {
   ];
 
   async function copyValue(key: string, value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
+    const copied = await copyText(value);
+    if (copied) {
       setCopiedKey(key);
       window.setTimeout(() => {
         setCopiedKey((current) => (current === key ? null : current));
       }, 1400);
-    } catch {
-      // no-op
     }
   }
 

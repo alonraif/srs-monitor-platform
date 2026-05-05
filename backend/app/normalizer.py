@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-import ipaddress
 from typing import Any
 
 from .config import get_settings
@@ -161,21 +160,6 @@ def _publisher_ip_by_cid(clients_response: JsonObject | None) -> dict[str, str]:
     return mapping
 
 
-def _is_local_ip(ip_text: str) -> bool:
-    try:
-        ip_obj = ipaddress.ip_address(ip_text)
-    except ValueError:
-        return True
-    return (
-        ip_obj.is_private
-        or ip_obj.is_loopback
-        or ip_obj.is_link_local
-        or ip_obj.is_multicast
-        or ip_obj.is_reserved
-        or ip_obj.is_unspecified
-    )
-
-
 def _external_viewers_by_stream(clients_response: JsonObject | None) -> dict[str, int]:
     counts: dict[str, int] = {}
     for client in _items(clients_response, "clients"):
@@ -196,8 +180,8 @@ def _is_external_playback_client(raw: JsonObject) -> bool:
     if not is_playback:
         return False
     ip = _unknown(raw.get("ip"))
-    # Exclude unknown/local/private/container probes and internal sessions.
-    if ip == "unknown" or _is_local_ip(ip):
+    # Keep unknown IPs out of viewer counts, but include private/LAN viewers.
+    if ip == "unknown":
         return False
     return True
 
@@ -286,7 +270,7 @@ def _normalize_stream(
     if fps is None:
         frames = _as_int(raw.get("frames"))
         # SRS may omit fps in /streams; estimate from total frames / uptime.
-        if frames is not None and uptime_seconds > 0:
+        if frames is not None and frames > 0 and uptime_seconds > 0:
             fps = round(frames / uptime_seconds, 2)
 
     return IngestStream(

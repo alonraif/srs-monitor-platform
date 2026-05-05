@@ -15,7 +15,25 @@ import type {
   SystemResponse
 } from "./types";
 
-const BASE_URL = (import.meta.env.VITE_BACKEND_API_URL || "http://localhost:8000").replace(/\/$/, "");
+function resolveBackendUrl(): string {
+  const inferredBackendUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
+  const configured = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.trim();
+  if (!configured) return inferredBackendUrl;
+  try {
+    const parsed = new URL(configured);
+    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const isRemoteBrowser = !["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (isLocalhost && isRemoteBrowser) {
+      parsed.hostname = window.location.hostname;
+      return parsed.toString().replace(/\/$/, "");
+    }
+    return configured.replace(/\/$/, "");
+  } catch {
+    return configured.replace(/\/$/, "");
+  }
+}
+
+const BASE_URL = resolveBackendUrl();
 export const LIVE_URL = `${BASE_URL}/api/live`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

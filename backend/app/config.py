@@ -44,6 +44,10 @@ class Settings(BaseModel):
         "CORS_ALLOW_ORIGINS",
         ["http://localhost:3000", "http://127.0.0.1:3000"],
     )
+    cors_allow_origin_regex: str = getenv(
+        "CORS_ALLOW_ORIGIN_REGEX",
+        r"^https?://(localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)(:\\d+)?$",
+    )
     sqlite_path: str = getenv("SQLITE_PATH", "/data/monitor.db")
     ffprobe_enabled: bool = _env_bool("FFPROBE_ENABLED", True)
     ffprobe_timeout_seconds: float = _env_float("FFPROBE_TIMEOUT_SECONDS", 2.5)
