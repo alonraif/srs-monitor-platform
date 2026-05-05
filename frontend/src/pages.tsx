@@ -2325,7 +2325,7 @@ export function MultiviewerPage() {
 	                      <div className="mv-ov-head">
 	                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
 	                        <span className="mv-ov-head-right">
-	                          <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span>
+	                          {stream ? <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span> : null}
 	                          {alarm ? <span className="mv-alarm">ALARM</span> : null}
 	                        </span>
 	                      </div>
@@ -2380,7 +2380,7 @@ export function MultiviewerPage() {
 	                      <div className="mv-ov-head">
 	                        <span>{expected?.umd || expected?.friendly_name || stream?.name || "Unassigned"}</span>
 	                        <span className="mv-ov-head-right">
-	                          <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span>
+	                          {stream ? <span className="mv-playback-badge">{playbackSourceLabel(preview?.source)}</span> : null}
 	                          {alarm ? <span className="mv-alarm">ALARM</span> : null}
 	                        </span>
 	                      </div>
