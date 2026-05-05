@@ -4,7 +4,7 @@ A fully dockerized starter repository for an SRS monitoring and multiviewer plat
 
 ## Services
 
-- `srs`: SRS media server with RTMP, HTTP server, and HTTP API enabled.
+- `srs`: SRS media server with RTMP, SRT, HTTP server/API, and WebRTC (RTC) enabled.
 - `monitor-backend`: FastAPI backend exposing `/api/health`.
 - `monitor-ui`: Vite frontend placeholder showing "SRS Monitor Platform".
 - `preview-service`: FastAPI preview service exposing `/health`.
@@ -40,11 +40,13 @@ Open:
 `SQLITE_PATH` backend SQLite DB path (default `/data/monitor.db`)
 `SRS_PUBLIC_HTTP_BASE_URL` public base for HLS/FLV URLs
 `SRS_PUBLIC_WEBRTC_BASE_URL` public base for WebRTC URLs
+`PREVIEW_PREFERRED_PROTOCOL` preview preference: `hls` or `webrtc` (default `hls`)
 `PREVIEW_SERVICE_URL` backend-to-preview internal URL
 `PREVIEW_PUBLIC_BASE_URL` public preview-service base URL
 `VITE_BACKEND_API_URL` frontend API base URL
 `VITE_SRS_RTMP_PORT`, `VITE_SRS_SRT_PORT` frontend-visible ingest ports
 `VITE_SRS_PUBLIC_HTTP_BASE_URL`, `VITE_SRS_PUBLIC_WEBRTC_BASE_URL` frontend-visible SRS public URLs
+`VITE_SRS_WEBRTC_API_BASE_URL` frontend-visible SRS RTC API base (used for `/rtc/v1/play/`)
 `BACKEND_PORT`, `FRONTEND_PORT`, `PREVIEW_PORT` service ports
 `NODE_EXPORTER_PORT`, `CADVISOR_PORT` optional monitoring profile ports
 
@@ -209,6 +211,12 @@ HTTP-FLV:
 http://localhost:8080/live/main-program.flv
 ```
 
+WebRTC (play URL form used by resolver/UI):
+
+```text
+webrtc://localhost/live/main-program
+```
+
 RTMP playback (FFplay/VLC):
 
 ```bash
@@ -229,14 +237,23 @@ ffplay "srt://localhost:10080?streamid=#!::r=live/main-program,m=request"
 
 ### 4) Preview/Rewrap Logic (No Transcoding)
 
-When preview is requested, backend resolves in this order:
-1. Native WebRTC URL
-2. Native HLS URL
-3. Native HTTP-FLV URL
-4. Preview service rewrap to HLS (`-c copy`)
-5. `preview_unavailable` with reason
+When preview is requested, backend resolves by configured preference:
+1. If `PREVIEW_PREFERRED_PROTOCOL=webrtc`: WebRTC -> HLS -> HTTP-FLV -> preview-service HLS rewrap
+2. If `PREVIEW_PREFERRED_PROTOCOL=hls`: HLS -> HTTP-FLV -> WebRTC -> preview-service HLS rewrap
+3. If no usable output exists: `preview_unavailable` with reason
 
 No transcoding, scaling, or bitrate conversion is used.
+
+### 4.1) Multiview Playback Badge
+
+Each PiP overlay shows a playback badge:
+- `WebRTC`
+- `HLS`
+- `FLV`
+
+Notes:
+- Badge is hidden when no stream is assigned to a tile.
+- Badge reflects the backend-resolved preview source for that tile.
 
 ### 5) Expected Feeds (NOC Contract)
 
@@ -419,5 +436,17 @@ Then verify:
   - `SRS_API_URL` is wrong or not routable from backend container.
 - Streams visible in SRS API but not playable in browser:
   - public base URLs are misconfigured (`SRS_PUBLIC_HTTP_BASE_URL`, `SRS_PUBLIC_WEBRTC_BASE_URL`).
+- Multiview shows `WebRTC` badge but no video:
+  - SRS RTC candidate is not browser-reachable (for example `localhost` from a remote browser).
+  - Fix `rtc_server.candidate` in `srs/srs.conf` to a reachable host IP/DNS.
+  - Ensure UDP `8000` is exposed and reachable (`docker-compose` maps `8000:8000/udp`).
+  - Ensure `VITE_SRS_WEBRTC_API_BASE_URL` points to a browser-reachable SRS API endpoint.
 - Preview unavailable:
   - source codec is browser-incompatible or preview input URL/protocol cannot be derived.
+
+## Recent UI/Runtime Updates
+
+- Multiview grid sizing fixes for dense layouts (`2x2`, `3x3`, `4x4`) to prevent tile overlap/cropping.
+- UMD overlay typography now scales up on larger PiPs.
+- UMD shading is anchored to overlay content instead of fixed top padding.
+- Favicon serving fixed for Dockerized frontend (`frontend/favicon.svg` is now copied in image build).
