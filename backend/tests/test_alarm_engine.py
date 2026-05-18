@@ -1,8 +1,11 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from backend.app.alarm_engine import AlarmEngine
 from backend.app.models import (
+    Alarm,
+    AlarmSeverity,
+    AlarmStatus,
     CapacityMetric,
     Client,
     ClientStatus,
@@ -16,6 +19,7 @@ from backend.app.models import (
     StreamProtocol,
     StreamStatus,
 )
+from backend.app.repositories.alarms import AlarmsRepository
 
 
 def _now() -> datetime:
@@ -96,3 +100,31 @@ def test_alarm_generation_expected_stream_matching():
     assert f"unexpected_source_ip:{expected.stream_id}" in alarms
     assert f"encryption_required_missing:{expected.stream_id}" in alarms
     assert f"no_clients:{expected.stream_id}" in alarms
+
+
+def test_reconcile_runtime_uses_grace_period_before_resolving():
+    engine = AlarmEngine()
+    repo = AlarmsRepository()
+
+    now = datetime.now(UTC).replace(microsecond=0)
+    existing = Alarm(
+        id="no_clients:feed-1",
+        severity=AlarmSeverity.INFO,
+        status=AlarmStatus.ACTIVE,
+        stream_id="feed-1",
+        title="No Clients Connected",
+        description="No active clients for expected stream",
+        first_seen=now,
+        last_seen=now,
+        resolved_at=None,
+        acknowledged_by=None,
+        acknowledged_at=None,
+    )
+    repo.upsert_runtime(existing)
+
+    still_active = engine._reconcile_runtime({}, now)
+    assert any(a.id == existing.id for a in still_active)
+
+    after_grace = now + timedelta(seconds=10)
+    resolved = engine._reconcile_runtime({}, after_grace)
+    assert all(a.id != existing.id for a in resolved)

@@ -34,6 +34,9 @@ class AlarmEngine:
     def __init__(self) -> None:
         self._alarms_repo = AlarmsRepository()
         self._expected_repo = ExpectedStreamsRepository()
+        # Avoid UI alarm flicker from one-off telemetry misses by requiring
+        # alarms to be absent for a short grace window before resolving.
+        self._resolve_grace_seconds = 9
 
     async def evaluate_and_list(self) -> AlarmsResponse:
         now = _now()
@@ -323,6 +326,10 @@ class AlarmEngine:
 
         for alarm_id, existing in runtime.items():
             if alarm_id in desired:
+                continue
+            age_since_last_seen = (now - existing.last_seen).total_seconds()
+            if age_since_last_seen < self._resolve_grace_seconds:
+                output.append(existing)
                 continue
             resolved = Alarm(
                 id=alarm_id,

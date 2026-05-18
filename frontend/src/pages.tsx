@@ -1982,9 +1982,26 @@ export function MultiviewerPage() {
   const effectiveData = live.data;
   const streams = effectiveData?.[0].streams ?? [];
   const alarms = effectiveData?.[1].alarms ?? [];
+  const stickyAlarmState = useRef<Map<string, { alarm: (typeof alarms)[number]; seenAtMs: number }>>(new Map());
+  const stickyAlarmHoldMs = 12_000;
   const serverLayouts = effectiveData?.[2].layouts ?? [];
   const layouts = localLayouts ?? serverLayouts;
   const expectedItems = effectiveData?.[3].streams ?? [];
+  const activeAlarms = useMemo(() => {
+    const nowMs = Date.now();
+    const currentActive = alarms.filter((alarm) => alarm.status !== "resolved");
+    for (const alarm of currentActive) {
+      stickyAlarmState.current.set(alarm.id, { alarm, seenAtMs: nowMs });
+    }
+    const next = new Map<string, { alarm: (typeof alarms)[number]; seenAtMs: number }>();
+    for (const [id, entry] of stickyAlarmState.current) {
+      if (nowMs - entry.seenAtMs <= stickyAlarmHoldMs) {
+        next.set(id, entry);
+      }
+    }
+    stickyAlarmState.current = next;
+    return Array.from(next.values()).map((entry) => entry.alarm);
+  }, [alarms]);
 
   useEffect(() => {
     if (localLayouts === null && serverLayouts.length > 0) {
@@ -2324,8 +2341,7 @@ export function MultiviewerPage() {
             const preview = stream ? previewByStream[stream.id] : null;
             const expected = stream ? resolveExpectedForStream(stream, expectedItems) : undefined;
             const activeStreamAlarms = stream
-              ? alarms.filter((a) => {
-                  if (a.status === "resolved") return false;
+              ? activeAlarms.filter((a) => {
                   if (!a.stream_id) return false;
                   return alarmMatchesStream(a.stream_id, stream);
                 })
@@ -2506,14 +2522,14 @@ export function MultiviewerPage() {
             <div className="mv-alerts-body">
               <h3>Active Alerts</h3>
               <ul className="events-list">
-                {alarms.filter((a) => a.status !== "resolved").slice(0, 50).map((alarm) => (
+                {activeAlarms.slice(0, 50).map((alarm) => (
                   <li key={`${alarm.id}-${alarm.last_seen}`} className="event-row">
                     <span className={`health health-${alarm.severity === "critical" ? "red" : alarm.severity === "warning" ? "yellow" : "green"}`}>{alarm.severity}</span>
                     <span className="event-title">{alarm.title}</span>
                     <span className="event-time">{alarm.stream_id || "-"}</span>
                   </li>
                 ))}
-                {alarms.filter((a) => a.status !== "resolved").length === 0 ? (
+                {activeAlarms.length === 0 ? (
                   <li className="event-row"><span className="event-title">No active alerts</span></li>
                 ) : null}
               </ul>
