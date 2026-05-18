@@ -85,6 +85,15 @@ export interface ExpectedStream {
   expected_resolution: string;
   expected_fps: number | null;
   encryption_required: boolean;
+  auth_required: boolean;
+  token_required: boolean;
+  auth_mode: "token_and_ip" | "ip_only" | "disabled";
+  allowed_publish_cidrs: string;
+  allowed_play_cidrs: string;
+  srt_encryption_required: boolean;
+  srt_pbkeylen: number;
+  srt_passphrase?: string | null;
+  has_srt_passphrase?: boolean;
   priority: number;
   notes: string;
   created_at: string;
@@ -94,6 +103,14 @@ export interface ExpectedStream {
 export interface ExpectedStreamsResponse {
   total: number;
   streams: ExpectedStream[];
+}
+
+export interface GlobalSrtSecurityConfig {
+  srt_encryption_required: boolean;
+  srt_pbkeylen: number;
+  has_srt_passphrase: boolean;
+  srt_passphrase?: string | null;
+  updated_at?: string | null;
 }
 
 export interface SystemResponse {

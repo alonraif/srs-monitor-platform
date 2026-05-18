@@ -9,6 +9,8 @@ services:
     command: >-
       /bin/sh -c "sed -e \"s|__SRS_HTTP_API_USERNAME__|$${SRS_HTTP_API_USERNAME}|g\"
       -e \"s|__SRS_HTTP_API_PASSWORD__|$${SRS_HTTP_API_PASSWORD}|g\"
+      -e \"s|__SRS_SRT_PASSPHRASE__|$${SRS_SRT_PASSPHRASE}|g\"
+      -e \"s|__SRS_SRT_PBKEYLEN__|$${SRS_SRT_PBKEYLEN}|g\"
       -e \"s|__SRS_HOOK_ON_PUBLISH_URL__|$${SRS_HOOK_ON_PUBLISH_URL}|g\"
       -e \"s|__SRS_HOOK_ON_PLAY_URL__|$${SRS_HOOK_ON_PLAY_URL}|g\"
       /usr/local/srs/conf/srs.secure.conf.template > /tmp/srs.secure.conf
@@ -16,6 +18,8 @@ services:
     environment:
       SRS_HTTP_API_USERNAME: "${SRS_HTTP_API_USERNAME:-monitor}"
       SRS_HTTP_API_PASSWORD: "${SRS_HTTP_API_PASSWORD:-change-me-now}"
+      SRS_SRT_PASSPHRASE: "${SRS_SRT_PASSPHRASE:-change-me-srt-passphrase}"
+      SRS_SRT_PBKEYLEN: "${SRS_SRT_PBKEYLEN:-16}"
       SRS_HOOK_ON_PUBLISH_URL: "${SRS_HOOK_ON_PUBLISH_URL:-http://monitor-backend:8000/internal/srs/on_publish?secret=dev-hook-secret}"
       SRS_HOOK_ON_PLAY_URL: "${SRS_HOOK_ON_PLAY_URL:-http://monitor-backend:8000/internal/srs/on_play?secret=dev-hook-secret}"
     volumes:

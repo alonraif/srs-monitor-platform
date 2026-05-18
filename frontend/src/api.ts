@@ -5,6 +5,7 @@ import type {
   DashboardResponse,
   ExpectedStream,
   ExpectedStreamsResponse,
+  GlobalSrtSecurityConfig,
   MultiviewLayout,
   MultiviewLayoutsResponse,
   MultiviewTile,
@@ -84,6 +85,9 @@ export const api = {
   updateExpectedStream: (streamId: string, payload: Omit<ExpectedStream, "id" | "stream_id" | "created_at" | "updated_at">) =>
     request<ExpectedStream>(`/api/config/streams/${streamId}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteExpectedStream: (streamId: string) => request<void>(`/api/config/streams/${streamId}`, { method: "DELETE" }),
+  getGlobalSrtSecurity: () => request<GlobalSrtSecurityConfig>("/api/config/srt-security"),
+  updateGlobalSrtSecurity: (payload: { srt_encryption_required: boolean; srt_pbkeylen: number; srt_passphrase?: string | null }) =>
+    request<GlobalSrtSecurityConfig>("/api/config/srt-security", { method: "PUT", body: JSON.stringify(payload) }),
   getMultiviewLayouts: () => request<MultiviewLayoutsResponse>("/api/multiview/layouts"),
   createMultiviewLayout: (payload: { name: string; type: MultiviewLayout["type"]; is_default: boolean; tiles: MultiviewTile[] }) =>
     request<MultiviewLayout>("/api/multiview/layouts", { method: "POST", body: JSON.stringify(payload) }),

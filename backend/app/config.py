@@ -71,6 +71,7 @@ class Settings(BaseModel):
     stream_auth_enforce: bool = _env_bool("STREAM_AUTH_ENFORCE", False)
     stream_auth_secret: str = getenv("STREAM_AUTH_SECRET", "")
     stream_auth_clock_skew_seconds: int = _env_int("STREAM_AUTH_CLOCK_SKEW_SECONDS", 60)
+    expected_stream_secret_key: str = getenv("EXPECTED_STREAM_SECRET_KEY", "")
     cors_allow_origins: list[str] = _env_list(
         "CORS_ALLOW_ORIGINS",
         ["http://localhost:3000", "http://127.0.0.1:3000"],

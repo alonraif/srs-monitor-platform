@@ -29,11 +29,22 @@ async def create_expected_stream(payload: ExpectedStreamCreate) -> ExpectedStrea
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Expected stream '{payload.stream_id}' already exists",
         ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.put("/config/streams/{id}", response_model=ExpectedStreamRecord)
 async def update_expected_stream(id: str, payload: ExpectedStreamUpdate) -> ExpectedStreamRecord:
-    result = repository.update_by_stream_id(id, payload)
+    try:
+        result = repository.update_by_stream_id(id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

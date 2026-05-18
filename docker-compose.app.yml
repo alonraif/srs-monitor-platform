@@ -25,6 +25,7 @@ services:
       STREAM_AUTH_ENFORCE: "${STREAM_AUTH_ENFORCE:-false}"
       STREAM_AUTH_SECRET: "${STREAM_AUTH_SECRET:-}"
       STREAM_AUTH_CLOCK_SKEW_SECONDS: "${STREAM_AUTH_CLOCK_SKEW_SECONDS:-60}"
+      EXPECTED_STREAM_SECRET_KEY: "${EXPECTED_STREAM_SECRET_KEY:-}"
       CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
       CORS_ALLOW_ORIGIN_REGEX: "${CORS_ALLOW_ORIGIN_REGEX:-^https?://(localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)(:\\d+)?$}"
       SQLITE_PATH: "${SQLITE_PATH:-/data/monitor.db}"

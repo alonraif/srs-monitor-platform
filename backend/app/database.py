@@ -92,6 +92,14 @@ def init_db() -> None:
                 created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                 updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             );
+
+            CREATE TABLE IF NOT EXISTS global_srt_security (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                srt_encryption_required INTEGER NOT NULL DEFAULT 1,
+                srt_pbkeylen INTEGER NOT NULL DEFAULT 16,
+                srt_passphrase_enc TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
             """
         )
         _ensure_column(connection, "expected_stream_configs", "auth_required", "INTEGER NOT NULL DEFAULT 1")
@@ -105,6 +113,14 @@ def init_db() -> None:
         _ensure_column(connection, "expected_stream_configs", "allowed_publish_cidrs", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "expected_stream_configs", "allowed_play_cidrs", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "expected_stream_configs", "srt_encryption_required", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(connection, "expected_stream_configs", "srt_pbkeylen", "INTEGER NOT NULL DEFAULT 16")
+        _ensure_column(connection, "expected_stream_configs", "srt_passphrase_enc", "TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO global_srt_security (singleton, srt_encryption_required, srt_pbkeylen, srt_passphrase_enc)
+            VALUES (1, 1, 16, '')
+            """
+        )
 
 
 def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:

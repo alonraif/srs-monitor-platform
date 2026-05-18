@@ -7,6 +7,7 @@ from ..models import (
     ExpectedStreamsResponse,
     ExpectedStreamUpdate,
 )
+from ..secrets import encrypt_secret
 
 
 def _parse_dt(value: str) -> datetime:
@@ -35,6 +36,9 @@ def _row_to_model(row: object) -> ExpectedStreamRecord:
         allowed_publish_cidrs=row["allowed_publish_cidrs"],
         allowed_play_cidrs=row["allowed_play_cidrs"],
         srt_encryption_required=bool(row["srt_encryption_required"]),
+        srt_pbkeylen=int(row["srt_pbkeylen"] or 16),
+        srt_passphrase=None,
+        has_srt_passphrase=bool((row["srt_passphrase_enc"] or "").strip()),
         priority=row["priority"],
         notes=row["notes"],
         created_at=_parse_dt(row["created_at"]),
@@ -56,6 +60,9 @@ class ExpectedStreamsRepository:
         return ExpectedStreamsResponse(total=len(streams), streams=streams)
 
     def create_stream(self, payload: ExpectedStreamCreate) -> ExpectedStreamRecord:
+        secret_enc = ""
+        if payload.srt_passphrase:
+            secret_enc = encrypt_secret(payload.srt_passphrase)
         with get_connection() as connection:
             cursor = connection.execute(
                 """
@@ -66,8 +73,9 @@ class ExpectedStreamsRepository:
                     expected_resolution, expected_fps, encryption_required,
                     auth_required, token_required, auth_mode,
                     allowed_publish_cidrs, allowed_play_cidrs, srt_encryption_required,
+                    srt_pbkeylen, srt_passphrase_enc,
                     priority, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.stream_id,
@@ -87,6 +95,8 @@ class ExpectedStreamsRepository:
                     payload.allowed_publish_cidrs,
                     payload.allowed_play_cidrs,
                     int(payload.srt_encryption_required),
+                    int(payload.srt_pbkeylen),
+                    secret_enc,
                     payload.priority,
                     payload.notes,
                 ),
@@ -106,6 +116,9 @@ class ExpectedStreamsRepository:
         return _row_to_model(row) if row is not None else None
 
     def update_by_stream_id(self, stream_id: str, payload: ExpectedStreamUpdate) -> ExpectedStreamRecord | None:
+        secret_update = None
+        if payload.srt_passphrase is not None:
+            secret_update = encrypt_secret(payload.srt_passphrase) if payload.srt_passphrase else ""
         with get_connection() as connection:
             result = connection.execute(
                 """
@@ -127,6 +140,8 @@ class ExpectedStreamsRepository:
                     allowed_publish_cidrs = ?,
                     allowed_play_cidrs = ?,
                     srt_encryption_required = ?,
+                    srt_pbkeylen = ?,
+                    srt_passphrase_enc = COALESCE(?, srt_passphrase_enc),
                     priority = ?,
                     notes = ?,
                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -149,6 +164,8 @@ class ExpectedStreamsRepository:
                     payload.allowed_publish_cidrs,
                     payload.allowed_play_cidrs,
                     int(payload.srt_encryption_required),
+                    int(payload.srt_pbkeylen),
+                    secret_update,
                     payload.priority,
                     payload.notes,
                     stream_id,

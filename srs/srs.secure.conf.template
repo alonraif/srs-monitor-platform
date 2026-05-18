@@ -23,6 +23,8 @@ http_server {
 srt_server {
     enabled         on;
     listen          10080;
+    passphrase      __SRS_SRT_PASSPHRASE__;
+    pbkeylen        __SRS_SRT_PBKEYLEN__;
     tsbpdmode       on;
     latency         200;
     recvlatency     200;

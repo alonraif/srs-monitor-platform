@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from "./components";
 import { useAlarmFeed, useAutoRefresh, useLiveBundle } from "./hooks";
 import type {
   ExpectedStream,
+  GlobalSrtSecurityConfig,
   MultiviewLayout,
   MultiviewLayoutType,
   MultiviewTile,
@@ -702,6 +703,14 @@ export function StreamsPage() {
       expected_resolution: stream.metrics.resolution && stream.metrics.resolution !== "unknown" ? stream.metrics.resolution : "1920x1080",
       expected_fps: stream.metrics.fps ?? null,
       encryption_required: stream.protocol === "SRT",
+      auth_required: false,
+      token_required: false,
+      auth_mode: "disabled",
+      allowed_publish_cidrs: "",
+      allowed_play_cidrs: "",
+      srt_encryption_required: stream.protocol === "SRT",
+      srt_pbkeylen: 16,
+      srt_passphrase: "",
       priority: 3,
       notes: "",
     });
@@ -711,8 +720,16 @@ export function StreamsPage() {
   async function submitAddExpected() {
     if (!expectedDraft) return;
     setExpectedActionError(null);
+    const payload = {
+      ...expectedDraft,
+      auth_required: false,
+      token_required: false,
+      auth_mode: "disabled" as const,
+      allowed_publish_cidrs: "",
+      allowed_play_cidrs: "",
+    };
     try {
-      await api.createExpectedStream(expectedDraft);
+      await api.createExpectedStream(payload);
       setShowExpectedModal(false);
       setExpectedDraft(null);
     } catch (err) {
@@ -797,7 +814,12 @@ export function StreamsPage() {
               <td>{row.stream.viewers_current}</td>
               <td>
                 {row.expected ? (
-                  <span className="health health-green">Expected</span>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span className="health health-green">Expected</span>
+                    <span className={`health ${row.expected.srt_encryption_required ? "health-green" : "health-yellow"}`}>
+                      {row.expected.srt_encryption_required ? "srt-enc" : "srt-open"}
+                    </span>
+                  </div>
                 ) : (
                   <button
                     className="btn-xs"
@@ -880,6 +902,31 @@ export function StreamsPage() {
                   <input type="checkbox" checked={expectedDraft.encryption_required} onChange={(e) => setExpectedDraft({ ...expectedDraft, encryption_required: e.target.checked })} />
                   Encryption/passphrase required
                 </label>
+              </div>
+              <div className="field">
+                <div className="field-label">SRT Encryption Required</div>
+                <label className="checkbox-line">
+                  <input type="checkbox" checked={expectedDraft.srt_encryption_required} onChange={(e) => setExpectedDraft({ ...expectedDraft, srt_encryption_required: e.target.checked })} />
+                  Enforce SRT encryption policy
+                </label>
+              </div>
+              <div className="field">
+                <div className="field-label">SRT PBKLEN</div>
+                <select value={String(expectedDraft.srt_pbkeylen ?? 16)} onChange={(e) => setExpectedDraft({ ...expectedDraft, srt_pbkeylen: Number(e.target.value) })}>
+                  <option value="0">0 (off)</option>
+                  <option value="16">16</option>
+                  <option value="24">24</option>
+                  <option value="32">32</option>
+                </select>
+              </div>
+              <div className="field">
+                <div className="field-label">SRT Passphrase</div>
+                <input
+                  type="password"
+                  placeholder="Set or update passphrase"
+                  value={expectedDraft.srt_passphrase ?? ""}
+                  onChange={(e) => setExpectedDraft({ ...expectedDraft, srt_passphrase: e.target.value })}
+                />
               </div>
               <div className="expected-actions">
                 <button onClick={() => void submitAddExpected()}>Add to list</button>
@@ -1282,14 +1329,22 @@ const defaultExpectedStream: Omit<ExpectedStream, "id" | "created_at" | "updated
   expected_max_bitrate: null,
   expected_resolution: "1920x1080",
   expected_fps: 50,
-  encryption_required: false,
+  encryption_required: true,
+  auth_required: false,
+  token_required: false,
+  auth_mode: "disabled",
+  allowed_publish_cidrs: "",
+  allowed_play_cidrs: "",
+  srt_encryption_required: true,
+  srt_pbkeylen: 16,
+  srt_passphrase: null,
   priority: 3,
   notes: ""
 };
 
 export function ExpectedStreamsPage() {
   const loader = useCallback(
-    () => Promise.all([api.getExpectedStreams(), api.getStreams()]),
+    () => Promise.all([api.getExpectedStreams(), api.getStreams(), api.getGlobalSrtSecurity()]),
     []
   );
   const { data, error, loading } = useAutoRefresh(loader, 5000);
@@ -1297,6 +1352,8 @@ export function ExpectedStreamsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [securityDraft, setSecurityDraft] = useState<GlobalSrtSecurityConfig | null>(null);
+  const [securityPassphraseInput, setSecurityPassphraseInput] = useState("");
   const resolutionOptions = [
     "1920x1080",
     "1280x720",
@@ -1308,6 +1365,12 @@ export function ExpectedStreamsPage() {
   ];
   const fpsOptions = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 
+  useEffect(() => {
+    if (!data) return;
+    const [, , globalSrt] = data;
+    setSecurityDraft((prev) => prev ?? globalSrt);
+  }, [data]);
+
   async function onDelete(streamId: string) {
     setActionError(null);
     try {
@@ -1317,19 +1380,27 @@ export function ExpectedStreamsPage() {
     }
   }
 
-  function encryptionStatus(expectedProtocol: string, required: boolean) {
-    if (expectedProtocol.toLowerCase() === "unknown") return "unknown";
-    return required ? "configured" : "missing";
-  }
-
   async function onSave() {
     setActionError(null);
+    const globalSrt = securityDraft ?? { srt_encryption_required: true, srt_pbkeylen: 16, has_srt_passphrase: false };
+    const sanitized = {
+      ...form,
+      encryption_required: globalSrt.srt_encryption_required,
+      auth_required: false,
+      token_required: false,
+      auth_mode: "disabled" as const,
+      allowed_publish_cidrs: "",
+      allowed_play_cidrs: "",
+      srt_encryption_required: globalSrt.srt_encryption_required,
+      srt_pbkeylen: globalSrt.srt_pbkeylen,
+      srt_passphrase: null,
+    };
     try {
       if (editingId) {
-        const { stream_id: _ignored, ...payload } = form;
+        const { stream_id: _ignored, ...payload } = sanitized;
         await api.updateExpectedStream(editingId, payload);
       } else {
-        await api.createExpectedStream(form);
+        await api.createExpectedStream(sanitized);
       }
       setEditingId(null);
       setIsFormOpen(false);
@@ -1361,7 +1432,7 @@ export function ExpectedStreamsPage() {
 
   if (loading) return <LoadingState />;
   if (error || !data) return <ErrorState error={error || "No expected streams"} />;
-  const [expectedData, streamsData] = data;
+  const [expectedData, streamsData, globalSrt] = data;
 
   const liveByToken = new Map<string, Stream>();
   for (const stream of streamsData.streams) {
@@ -1377,6 +1448,64 @@ export function ExpectedStreamsPage() {
       <div className="panel-head">
         <h2>Expected Streams</h2>
         <button className="btn-icon" onClick={onOpenCreate} title="Add expected stream">+</button>
+      </div>
+      <div className="panel" style={{ marginBottom: "12px" }}>
+        <div className="panel-head">
+          <h3>Global SRT Encryption</h3>
+        </div>
+        <div className="expected-form-grid">
+          <div className="field">
+            <div className="field-label">SRT Encryption Required</div>
+            <label className="checkbox-line">
+              <input
+                type="checkbox"
+                checked={Boolean((securityDraft ?? globalSrt).srt_encryption_required)}
+                onChange={(e) => setSecurityDraft({ ...(securityDraft ?? globalSrt), srt_encryption_required: e.target.checked })}
+              />
+              Enforce encrypted SRT ingest
+            </label>
+          </div>
+          <div className="field">
+            <div className="field-label">SRT PBKLEN</div>
+            <select
+              value={String((securityDraft ?? globalSrt).srt_pbkeylen ?? 16)}
+              onChange={(e) => setSecurityDraft({ ...(securityDraft ?? globalSrt), srt_pbkeylen: Number(e.target.value) })}
+            >
+              <option value="16">16 (AES-128)</option>
+              <option value="24">24 (AES-192)</option>
+              <option value="32">32 (AES-256)</option>
+            </select>
+          </div>
+          <div className="field">
+            <div className="field-label">SRT Passphrase</div>
+            <input
+              type="password"
+              placeholder={(securityDraft ?? globalSrt).has_srt_passphrase ? "Stored (enter new to rotate)" : "Set passphrase"}
+              value={securityPassphraseInput}
+              onChange={(e) => setSecurityPassphraseInput(e.target.value)}
+            />
+          </div>
+          <div className="expected-actions">
+            <button
+              onClick={async () => {
+                setActionError(null);
+                try {
+                  const saved = await api.updateGlobalSrtSecurity({
+                    srt_encryption_required: Boolean((securityDraft ?? globalSrt).srt_encryption_required),
+                    srt_pbkeylen: Number((securityDraft ?? globalSrt).srt_pbkeylen ?? 16),
+                    srt_passphrase: securityPassphraseInput ? securityPassphraseInput : null
+                  });
+                  setSecurityDraft(saved);
+                  setSecurityPassphraseInput("");
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : "Failed to save global SRT security");
+                }
+              }}
+            >
+              Save Global SRT Settings
+            </button>
+          </div>
+        </div>
       </div>
       {actionError ? <ErrorState error={actionError} /> : null}
       {isFormOpen ? (
@@ -1479,17 +1608,6 @@ export function ExpectedStreamsPage() {
             <option value="">unknown</option>
           </select>
         </div>
-        <div className="field">
-          <div className="field-label">Encryption Requirement</div>
-          <label className="checkbox-line">
-            <input
-              type="checkbox"
-              checked={form.encryption_required}
-              onChange={(e) => setForm({ ...form, encryption_required: e.target.checked })}
-            />
-            Encryption/passphrase required
-          </label>
-        </div>
         <div className="expected-actions">
           <button onClick={() => void onSave()}>{editingId ? "Apply" : "Add to list"}</button>
           <button onClick={onCancelForm}>Cancel</button>
@@ -1510,7 +1628,6 @@ export function ExpectedStreamsPage() {
             <th>Source</th>
             <th>Bitrate Range</th>
             <th>Resolution/FPS</th>
-            <th>Encryption</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -1537,7 +1654,6 @@ export function ExpectedStreamsPage() {
               <td>
                 {(stream.expected_resolution && stream.expected_resolution !== "unknown" ? stream.expected_resolution : "-")} / {stream.expected_fps ?? "-"} fps
               </td>
-              <td>{encryptionStatus(stream.expected_protocol, stream.encryption_required) || "-"}</td>
               <td className="row-actions">
                 <button onClick={() => onEdit(stream)}>Edit</button>
                 <button onClick={() => void onDelete(stream.stream_id)}>Delete</button>

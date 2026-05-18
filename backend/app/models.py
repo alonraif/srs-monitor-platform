@@ -235,6 +235,8 @@ class ExpectedStreamBase(BaseModel):
     allowed_publish_cidrs: str = Field(default="", max_length=1000)
     allowed_play_cidrs: str = Field(default="", max_length=1000)
     srt_encryption_required: bool = False
+    srt_pbkeylen: int = Field(default=16)
+    srt_passphrase: str | None = Field(default=None, max_length=200)
     priority: int = Field(default=3, ge=1, le=5)
     notes: str = Field(default="", max_length=2000)
 
@@ -260,12 +262,15 @@ class ExpectedStreamUpdate(BaseModel):
     allowed_publish_cidrs: str = Field(default="", max_length=1000)
     allowed_play_cidrs: str = Field(default="", max_length=1000)
     srt_encryption_required: bool = False
+    srt_pbkeylen: int = Field(default=16)
+    srt_passphrase: str | None = Field(default=None, max_length=200)
     priority: int = Field(default=3, ge=1, le=5)
     notes: str = Field(default="", max_length=2000)
 
 
 class ExpectedStreamRecord(ExpectedStreamBase):
     id: int
+    has_srt_passphrase: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -292,6 +297,20 @@ class StreamNotesResponse(BaseModel):
 class ExpectedStreamsResponse(BaseModel):
     total: int = Field(ge=0)
     streams: list[ExpectedStreamRecord]
+
+
+class GlobalSrtSecurityConfig(BaseModel):
+    srt_encryption_required: bool = False
+    srt_pbkeylen: int = Field(default=16)
+    has_srt_passphrase: bool = False
+    srt_passphrase: str | None = Field(default=None, max_length=200)
+    updated_at: datetime | None = None
+
+
+class GlobalSrtSecurityUpdate(BaseModel):
+    srt_encryption_required: bool = False
+    srt_pbkeylen: int = Field(default=16)
+    srt_passphrase: str | None = Field(default=None, max_length=200)
 
 
 class MultiviewLayoutType(StrEnum):

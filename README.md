@@ -36,6 +36,7 @@ Open:
 `SRS_API_PORT` SRS API port (default `1985`)
 `SRS_API_URL` backend-to-SRS API URL (default `http://srs:1985`)
 `SRS_HTTP_API_USERNAME`, `SRS_HTTP_API_PASSWORD` credentials for secure SRS HTTP API config template
+`SRS_SRT_PASSPHRASE`, `SRS_SRT_PBKEYLEN` SRS listener-side SRT encryption settings (must match encoder)
 `SRS_HOOK_SHARED_SECRET` shared secret expected by backend internal SRS hook endpoints
 `SRS_HOOK_ON_PUBLISH_URL`, `SRS_HOOK_ON_PLAY_URL` SRS callback URLs used by secure SRS template
 `SRS_API_TIMEOUT_SECONDS` SRS API timeout (default `2.5`)
@@ -53,6 +54,7 @@ Open:
 `STREAM_AUTH_ENFORCE` enforce allow/deny for hook decisions (`false` = report-only mode)
 `STREAM_AUTH_SECRET` HMAC secret for signed stream publish/play tokens
 `STREAM_AUTH_CLOCK_SKEW_SECONDS` allowed expiration skew for token checks
+`EXPECTED_STREAM_SECRET_KEY` encryption key for per-stream SRT passphrases stored at rest
 `PREVIEW_PUBLIC_BASE_URL` public preview-service base URL
 `VITE_BACKEND_API_URL` frontend API base URL
 `VITE_BACKEND_API_KEY` optional bearer key sent by frontend to backend API
