@@ -63,6 +63,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 function buildVlcUrl(stream: Stream): string {
   const host = window.location.hostname;
   const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
+  const srtStreamId = sanitizeSrtPath(stream.stream_key || appKey);
   const proto = String(stream.protocol || "").toLowerCase();
   const base = resolveSrsHttpBaseUrl(host);
   const rtmpPort = (import.meta.env.VITE_SRS_RTMP_PORT as string | undefined) || "1935";
@@ -71,16 +72,17 @@ function buildVlcUrl(stream: Stream): string {
   const flvUrl = `${base.replace(/\/$/, "")}/${appKey}.flv`;
   const hlsUrl = `${base.replace(/\/$/, "")}/${appKey}.m3u8`;
   const rtmpUrl = `rtmp://${host}:${rtmpPort}/${appKey}`;
+  const srtSimpleUrl = `srt://${host}:${srtPort}?streamid=${encodeURIComponent(srtStreamId)}`;
   const srtUrl = `srt://${host}:${srtPort}?streamid=#!::r=${appKey},m=request`;
 
   const outputs = stream.outputs;
   const byProtocol =
-    proto === "srt" ? [outputs?.srt, srtUrl, outputs?.rtmp, rtmpUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
-    proto === "rtmp" ? [outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
+    proto === "srt" ? [srtSimpleUrl, outputs?.srt, srtUrl, outputs?.rtmp, rtmpUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
+    proto === "rtmp" ? [outputs?.rtmp, rtmpUrl, srtSimpleUrl, outputs?.srt, srtUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
     proto === "hls" ? [outputs?.hls, hlsUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl] :
-    [outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl, outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl];
+    [outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl, outputs?.rtmp, rtmpUrl, srtSimpleUrl, outputs?.srt, srtUrl];
   for (const candidate of byProtocol) {
-    const normalized = normalizePlaybackUrl(candidate);
+    const normalized = normalizePlaybackUrl(candidate, { playbackOnly: true });
     if (normalized) return normalized;
   }
   return flvUrl;
@@ -134,11 +136,20 @@ function resolveSrsHttpBaseUrl(host: string): string {
   }
 }
 
-function normalizePlaybackUrl(url: string | null | undefined): string | null {
+function normalizePlaybackUrl(
+  url: string | null | undefined,
+  options?: { playbackOnly?: boolean }
+): string | null {
   if (!url) return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
-  const sanitized = trimmed.replace(/:(\d+)\}\?/g, ":$1?");
+  const playbackOnly = options?.playbackOnly === true;
+  let sanitized = trimmed.replace(/:(\d+)\}\?/g, ":$1?");
+  if (playbackOnly) {
+    if (/^webrtc:\/\//i.test(sanitized)) return null;
+    sanitized = sanitized.replace(/([?&]streamid=#!::r=[^,]+),m=publish\b/i, "$1,m=request");
+    if (/streamid=#!::[^,\s]+,m=publish\b/i.test(sanitized)) return null;
+  }
   const host = window.location.hostname;
   const base = `${window.location.protocol}//${host}`;
   try {
@@ -576,11 +587,16 @@ export function StreamsPage() {
     const encryption =
       stream.protocol.toLowerCase() === "srt" ? "encrypted" : stream.protocol.toLowerCase() === "rtmp" ? "no-passphrase" : "unknown";
     const codec = `${stream.metrics.video_codec || "unknown"} / ${stream.metrics.audio_codec || "unknown"}`;
+    const appStreamFull = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
+    const appStreamDisplay =
+      stream.protocol.toLowerCase() === "srt"
+        ? sanitizeSrtPath(stream.stream_key || appStreamFull)
+        : appStreamFull;
     return {
       stream,
       expected,
       health,
-      appStream: sanitizeSrtPath(`${stream.app}/${stream.stream_key}`),
+      appStream: appStreamDisplay,
       mode,
       inputBitrate,
       outputBitrate,

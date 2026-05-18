@@ -16,12 +16,12 @@ router = APIRouter()
 
 
 class PreviewStartRequest(BaseModel):
-    stream_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:-]{1,200}$")
+    stream_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:/-]{1,200}$")
     inactivity_timeout_seconds: int = Field(default=60, ge=5, le=3600)
 
 
 class PreviewStopRequest(BaseModel):
-    stream_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:-]{1,200}$")
+    stream_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:/-]{1,200}$")
 
 
 class PreviewStartResponse(BaseModel):
@@ -97,7 +97,7 @@ async def preview_status() -> PreviewStatusResponse:
     return PreviewStatusResponse(reachable=True, previews=previews)
 
 
-@router.get("/preview/url/{stream_id}", response_model=PreviewStartResponse)
+@router.get("/preview/url/{stream_id:path}", response_model=PreviewStartResponse)
 async def preview_url(stream_id: str) -> PreviewStartResponse:
     stream = next((s for s in await _source_streams() if s.id == stream_id), None)
     if stream is None:
