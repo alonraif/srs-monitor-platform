@@ -288,7 +288,7 @@ async function copyText(text: string): Promise<boolean> {
   return copied;
 }
 
-function BitrateChart({ points }: { points: Array<{ ts: number; bitrate: number }> }) {
+function BitrateChart({ points, windowMs }: { points: Array<{ ts: number; bitrate: number }>; windowMs: number }) {
   if (points.length < 2) {
     return <div className="state empty">Collecting bitrate samples...</div>;
   }
@@ -298,12 +298,12 @@ function BitrateChart({ points }: { points: Array<{ ts: number; bitrate: number 
   const padR = 16;
   const padT = 14;
   const padB = 36;
-  const minTs = points[0].ts;
-  const maxTs = points[points.length - 1].ts;
+  const maxTs = Date.now();
+  const minTs = maxTs - Math.max(windowMs, 1);
   const maxBitrate = Math.max(...points.map((point) => point.bitrate), 1);
   const minBitrate = 0;
   const ySpan = Math.max(maxBitrate - minBitrate, 1);
-  const xSpan = Math.max(maxTs - minTs, 1);
+  const xSpan = Math.max(windowMs, 1);
   const chartW = width - padL - padR;
   const chartH = height - padT - padB;
   const toX = (ts: number) => padL + ((ts - minTs) / xSpan) * chartW;
@@ -1109,7 +1109,7 @@ export function StreamDetailPage() {
             <option value={43_200_000}>Last 12 hours</option>
           </select>
         </div>
-        <BitrateChart points={visibleBitratePoints} />
+        <BitrateChart points={visibleBitratePoints} windowMs={bitrateWindowMs} />
       </div>
 
       <div className="panel">
