@@ -36,6 +36,8 @@ Open:
 `SRS_API_PORT` SRS API port (default `1985`)
 `SRS_API_URL` backend-to-SRS API URL (default `http://srs:1985`)
 `SRS_HTTP_API_USERNAME`, `SRS_HTTP_API_PASSWORD` credentials for secure SRS HTTP API config template
+`SRS_HOOK_SHARED_SECRET` shared secret expected by backend internal SRS hook endpoints
+`SRS_HOOK_ON_PUBLISH_URL`, `SRS_HOOK_ON_PLAY_URL` SRS callback URLs used by secure SRS template
 `SRS_API_TIMEOUT_SECONDS` SRS API timeout (default `2.5`)
 `MOCK_MODE` `true|false` (default `true`)
 `SQLITE_PATH` backend SQLite DB path (default `/data/monitor.db`)
@@ -48,6 +50,9 @@ Open:
 `BACKEND_READ_API_KEY` API key required for `GET/HEAD/OPTIONS` when auth enabled
 `BACKEND_WRITE_API_KEY` API key required for mutating methods when auth enabled
 `SRS_API_USERNAME`, `SRS_API_PASSWORD` optional SRS HTTP API basic auth credentials
+`STREAM_AUTH_ENFORCE` enforce allow/deny for hook decisions (`false` = report-only mode)
+`STREAM_AUTH_SECRET` HMAC secret for signed stream publish/play tokens
+`STREAM_AUTH_CLOCK_SKEW_SECONDS` allowed expiration skew for token checks
 `PREVIEW_PUBLIC_BASE_URL` public preview-service base URL
 `VITE_BACKEND_API_URL` frontend API base URL
 `VITE_BACKEND_API_KEY` optional bearer key sent by frontend to backend API
@@ -189,45 +194,39 @@ Security hardening and deployment profile guidance:
 - `deploy/nginx/split-host-server-b.conf`
 - `deploy/nginx/split-host-server-a-srs-api.conf`
 
-Phase 1 compose overlays (proxy + control-plane port reduction):
+Deployment overlays:
 
-- `deploy/compose/docker-compose.phase1.single-host.yml`
-- `deploy/compose/docker-compose.phase1.split-host-monitor.yml`
-- `deploy/compose/docker-compose.phase1.split-host-srs.yml`
+- `deploy/compose/docker-compose.single-host.yml`
+- `deploy/compose/docker-compose.split-srs.yml`
+- `deploy/compose/docker-compose.split-monitor.yml`
 
-Phase 2 compose overlays (API auth and stricter CORS):
+Stream auth behavior (Phase 3):
 
-- `deploy/compose/docker-compose.phase2.single-host.yml`
-- `deploy/compose/docker-compose.phase2.split-host-monitor.yml`
-- `deploy/compose/docker-compose.phase2.split-host-srs.yml`
-
-Phase 1 usage:
+- SRS secure template enables `http_hooks` for `on_publish` and `on_play`
+- Backend internal endpoints:
+  - `POST /internal/srs/on_publish`
+  - `POST /internal/srs/on_play`
+- Auth token mint endpoint:
+  - `POST /api/stream-auth/token`
+- `STREAM_AUTH_ENFORCE=false` starts in report-only mode
+- `STREAM_AUTH_ENFORCE=true` enforces denies
 
 Single-host:
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/compose/docker-compose.phase1.single-host.yml up --build -d
+docker compose -f docker-compose.yml -f deploy/compose/docker-compose.single-host.yml up --build -d
 ```
 
 Split-host (Server B monitor stack):
 
 ```bash
-docker compose -f docker-compose.app.yml -f deploy/compose/docker-compose.phase1.split-host-monitor.yml up --build -d
+docker compose -f docker-compose.app.yml -f deploy/compose/docker-compose.split-monitor.yml up --build -d
 ```
 
 Split-host (Server A SRS stack):
 
 ```bash
-docker compose -f docker-compose.srs.yml -f deploy/compose/docker-compose.phase1.split-host-srs.yml up --build -d
-```
-
-Phase 2 usage (single-host):
-
-```bash
-docker compose -f docker-compose.yml \
-  -f deploy/compose/docker-compose.phase1.single-host.yml \
-  -f deploy/compose/docker-compose.phase2.single-host.yml \
-  up --build -d
+docker compose -f docker-compose.srs.yml -f deploy/compose/docker-compose.split-srs.yml up --build -d
 ```
 
 TLS certificates are expected at:

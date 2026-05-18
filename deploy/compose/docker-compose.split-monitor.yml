@@ -1,0 +1,32 @@
+services:
+  monitor-backend:
+    ports: []
+    environment:
+      SRS_API_USERNAME: "${SRS_HTTP_API_USERNAME:-monitor}"
+      SRS_API_PASSWORD: "${SRS_HTTP_API_PASSWORD:-change-me-now}"
+      SRS_HOOK_SHARED_SECRET: "${SRS_HOOK_SHARED_SECRET:-dev-hook-secret}"
+      STREAM_AUTH_ENFORCE: "${STREAM_AUTH_ENFORCE:-false}"
+      STREAM_AUTH_SECRET: "${STREAM_AUTH_SECRET:-change-stream-auth-secret}"
+      STREAM_AUTH_CLOCK_SKEW_SECONDS: "${STREAM_AUTH_CLOCK_SKEW_SECONDS:-60}"
+      CORS_ALLOW_ORIGIN_REGEX: "${CORS_ALLOW_ORIGIN_REGEX:-}"
+
+  monitor-ui:
+    ports: []
+
+  preview-service:
+    ports: []
+
+  reverse-proxy:
+    build:
+      context: ./deploy/nginx/proxy-image
+    container_name: reverse-proxy
+    restart: unless-stopped
+    depends_on:
+      - monitor-ui
+      - monitor-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/split-host-server-b.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs

@@ -229,6 +229,12 @@ class ExpectedStreamBase(BaseModel):
     expected_resolution: str = Field(default="unknown", max_length=40)
     expected_fps: float | None = Field(default=None, ge=0)
     encryption_required: bool = False
+    auth_required: bool = True
+    token_required: bool = True
+    auth_mode: Literal["token_and_ip", "ip_only", "disabled"] = "token_and_ip"
+    allowed_publish_cidrs: str = Field(default="", max_length=1000)
+    allowed_play_cidrs: str = Field(default="", max_length=1000)
+    srt_encryption_required: bool = False
     priority: int = Field(default=3, ge=1, le=5)
     notes: str = Field(default="", max_length=2000)
 
@@ -248,6 +254,12 @@ class ExpectedStreamUpdate(BaseModel):
     expected_resolution: str = Field(default="unknown", max_length=40)
     expected_fps: float | None = Field(default=None, ge=0)
     encryption_required: bool = False
+    auth_required: bool = True
+    token_required: bool = True
+    auth_mode: Literal["token_and_ip", "ip_only", "disabled"] = "token_and_ip"
+    allowed_publish_cidrs: str = Field(default="", max_length=1000)
+    allowed_play_cidrs: str = Field(default="", max_length=1000)
+    srt_encryption_required: bool = False
     priority: int = Field(default=3, ge=1, le=5)
     notes: str = Field(default="", max_length=2000)
 

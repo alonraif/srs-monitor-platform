@@ -29,6 +29,16 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item for item in items if item]
 
 
+def _env_int(name: str, default: int) -> int:
+    value = getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 def _env_regex(name: str, default: str) -> str:
     value = getenv(name)
     if value is None:
@@ -57,6 +67,10 @@ class Settings(BaseModel):
     backend_write_api_key: str = getenv("BACKEND_WRITE_API_KEY", "")
     srs_api_username: str = getenv("SRS_API_USERNAME", "")
     srs_api_password: str = getenv("SRS_API_PASSWORD", "")
+    srs_hook_shared_secret: str = getenv("SRS_HOOK_SHARED_SECRET", "")
+    stream_auth_enforce: bool = _env_bool("STREAM_AUTH_ENFORCE", False)
+    stream_auth_secret: str = getenv("STREAM_AUTH_SECRET", "")
+    stream_auth_clock_skew_seconds: int = _env_int("STREAM_AUTH_CLOCK_SKEW_SECONDS", 60)
     cors_allow_origins: list[str] = _env_list(
         "CORS_ALLOW_ORIGINS",
         ["http://localhost:3000", "http://127.0.0.1:3000"],

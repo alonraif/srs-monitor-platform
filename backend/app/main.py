@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from .auth import enforce_backend_api_auth
 from .database import init_db
 from .config import get_settings
-from .routers import alarms, clients, config_streams, dashboard, health, live, multiview, preview, stream_notes, streams, system
+from .routers import alarms, clients, config_streams, dashboard, health, internal_srs_hooks, live, multiview, preview, stream_auth, stream_notes, streams, system
 
 
 settings = get_settings()
@@ -55,3 +55,5 @@ app.include_router(config_streams.router, prefix="/api", tags=["config-streams"]
 app.include_router(preview.router, prefix="/api", tags=["preview"])
 app.include_router(multiview.router, prefix="/api", tags=["multiview"])
 app.include_router(live.router, prefix="/api", tags=["live"])
+app.include_router(stream_auth.router, prefix="/api", tags=["stream-auth"])
+app.include_router(internal_srs_hooks.router, prefix="/internal", tags=["internal-srs-hooks"])

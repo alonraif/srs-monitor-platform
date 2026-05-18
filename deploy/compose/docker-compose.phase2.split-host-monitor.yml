@@ -1,6 +1,0 @@
-services:
-  monitor-backend:
-    environment:
-      SRS_API_USERNAME: "${SRS_HTTP_API_USERNAME:-monitor}"
-      SRS_API_PASSWORD: "${SRS_HTTP_API_PASSWORD:-change-me-now}"
-      CORS_ALLOW_ORIGIN_REGEX: "${CORS_ALLOW_ORIGIN_REGEX:-}"

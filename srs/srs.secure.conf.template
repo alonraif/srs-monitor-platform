@@ -42,6 +42,12 @@ stats {
 }
 
 vhost __defaultVhost__ {
+    http_hooks {
+        enabled     on;
+        on_publish  __SRS_HOOK_ON_PUBLISH_URL__;
+        on_play     __SRS_HOOK_ON_PLAY_URL__;
+    }
+
     srt {
         enabled     on;
         srt_to_rtmp on;
@@ -66,6 +72,12 @@ vhost __defaultVhost__ {
 }
 
 vhost ab_rtmp_direct {
+    http_hooks {
+        enabled     on;
+        on_publish  __SRS_HOOK_ON_PUBLISH_URL__;
+        on_play     __SRS_HOOK_ON_PLAY_URL__;
+    }
+
     srt {
         enabled     off;
         srt_to_rtmp off;

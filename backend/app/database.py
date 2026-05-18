@@ -94,6 +94,25 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_column(connection, "expected_stream_configs", "auth_required", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(connection, "expected_stream_configs", "token_required", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(
+            connection,
+            "expected_stream_configs",
+            "auth_mode",
+            "TEXT NOT NULL DEFAULT 'token_and_ip'",
+        )
+        _ensure_column(connection, "expected_stream_configs", "allowed_publish_cidrs", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "expected_stream_configs", "allowed_play_cidrs", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "expected_stream_configs", "srt_encryption_required", "INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    names = {row[1] for row in rows}
+    if column in names:
+        return
+    connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 @contextmanager
