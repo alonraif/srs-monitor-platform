@@ -190,6 +190,7 @@ http://localhost:8080/live/test.flv
 Security hardening and deployment profile guidance:
 
 - `docs/security-deployment-profiles.md`
+- `docs/security-implementation.md`
 - `deploy/nginx/single-host.conf`
 - `deploy/nginx/split-host-server-b.conf`
 - `deploy/nginx/split-host-server-a-srs-api.conf`
