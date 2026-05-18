@@ -65,26 +65,23 @@ function buildVlcUrl(stream: Stream): string {
   const appKey = sanitizeSrtPath(`${stream.app}/${stream.stream_key}`);
   const proto = String(stream.protocol || "").toLowerCase();
   const base = resolveSrsHttpBaseUrl(host);
+  const rtmpPort = (import.meta.env.VITE_SRS_RTMP_PORT as string | undefined) || "1935";
+  const srtPort = (import.meta.env.VITE_SRS_SRT_PORT as string | undefined) || "10080";
 
-  // For player playback, prefer remux outputs over raw SRT pull.
-  // This avoids decoder join issues seen with direct SRT request mode.
   const flvUrl = `${base.replace(/\/$/, "")}/${appKey}.flv`;
   const hlsUrl = `${base.replace(/\/$/, "")}/${appKey}.m3u8`;
+  const rtmpUrl = `rtmp://${host}:${rtmpPort}/${appKey}`;
+  const srtUrl = `srt://${host}:${srtPort}?streamid=#!::r=${appKey},m=request`;
 
   const outputs = stream.outputs;
-  if (outputs) {
-    const preferred = outputs.hls || outputs.flv || outputs.httpflv || outputs.rtmp || outputs.srt;
-    const normalizedPreferred = normalizePlaybackUrl(preferred);
-    if (normalizedPreferred) return normalizedPreferred;
-  }
-
-  if (proto === "srt") return flvUrl;
-  if (proto === "rtmp") {
-    const rtmpPort = (import.meta.env.VITE_SRS_RTMP_PORT as string | undefined) || "1935";
-    return `rtmp://${host}:${rtmpPort}/${appKey}`;
-  }
-  if (proto === "hls") {
-    return hlsUrl;
+  const byProtocol =
+    proto === "srt" ? [outputs?.srt, srtUrl, outputs?.rtmp, rtmpUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
+    proto === "rtmp" ? [outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl] :
+    proto === "hls" ? [outputs?.hls, hlsUrl, outputs?.flv, outputs?.httpflv, flvUrl, outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl] :
+    [outputs?.flv, outputs?.httpflv, flvUrl, outputs?.hls, hlsUrl, outputs?.rtmp, rtmpUrl, outputs?.srt, srtUrl];
+  for (const candidate of byProtocol) {
+    const normalized = normalizePlaybackUrl(candidate);
+    if (normalized) return normalized;
   }
   return flvUrl;
 }
