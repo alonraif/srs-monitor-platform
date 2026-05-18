@@ -1943,6 +1943,7 @@ export function MultiviewerPage() {
   const [soloTileId, setSoloTileId] = useState<string | null>(null);
   const [soloAnimating, setSoloAnimating] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const previewRetryAtRef = useRef<Record<string, number>>({});
   const [localLayouts, setLocalLayouts] = useState<MultiviewLayout[] | null>(null);
   const [alertsDrawerOpen, setAlertsDrawerOpen] = useState(false);
   const [bootstrapDone, setBootstrapDone] = useState(false);
@@ -2081,18 +2082,125 @@ export function MultiviewerPage() {
     () => layouts.find((layout) => layout.id === selectedLayoutId) ?? null,
     [layouts, selectedLayoutId]
   );
-  const streamById = useMemo(() => new Map(streams.map((s) => [s.id, s])), [streams]);
+  const expectedById = useMemo(() => {
+    const byId = new Map<string, ExpectedStream>();
+    for (const expected of expectedItems) {
+      byId.set(String(expected.stream_id || "").trim(), expected);
+    }
+    return byId;
+  }, [expectedItems]);
+  const multiviewStreams = useMemo(() => {
+    const byId = new Map(streams.map((stream) => [stream.id, stream] as const));
+    const liveStreamTokens = streams.map((stream) => streamMatchTokens(stream));
+
+    for (const expected of expectedItems) {
+      const streamId = String(expected.stream_id || "").trim();
+      if (!streamId) continue;
+      if (byId.has(streamId)) continue;
+      const matchedLive = liveStreamTokens.some((tokens) => tokens.has(streamId));
+      if (matchedLive) continue;
+      byId.set(streamId, {
+        id: streamId,
+        name: expected.friendly_name || expected.umd || streamId,
+        protocol: expected.expected_protocol && expected.expected_protocol !== "unknown" ? expected.expected_protocol : "unknown",
+        status: "offline",
+        app: streamId.includes("/") ? streamId.split("/")[0] || "unknown" : "unknown",
+        stream_key: streamId.includes("/") ? streamId.split("/").slice(1).join("/") || streamId : streamId,
+        source_ip: "unknown",
+        uptime_seconds: 0,
+        viewers_current: 0,
+        outputs: {},
+        metrics: {
+          bitrate_kbps: 0,
+          fps: expected.expected_fps ?? null,
+          scan_type: "unknown",
+          resolution: expected.expected_resolution || "unknown",
+          video_codec: "unknown",
+          audio_codec: "unknown",
+        },
+      });
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [streams, expectedItems]);
+  const liveStreamByExpectedId = useMemo(() => {
+    const match = new Map<string, Stream>();
+    for (const expected of expectedItems) {
+      const expectedId = String(expected.stream_id || "").trim();
+      if (!expectedId) continue;
+      const found = streams.find((stream) => streamMatchTokens(stream).has(expectedId));
+      if (found) {
+        match.set(expectedId, found);
+      }
+    }
+    return match;
+  }, [streams, expectedItems]);
+  const streamById = useMemo(() => {
+    const byId = new Map(multiviewStreams.map((stream) => [stream.id, stream] as const));
+    const assignedStreamIds = Array.from(new Set((currentLayout?.tiles ?? []).map((tile) => tile.assigned_stream_id).filter(Boolean))) as string[];
+    for (const assignedId of assignedStreamIds) {
+      if (byId.has(assignedId)) continue;
+      const matchedLive = liveStreamByExpectedId.get(assignedId);
+      if (matchedLive) {
+        byId.set(assignedId, matchedLive);
+        continue;
+      }
+      if (/^vid-[a-z0-9]+$/i.test(assignedId) && streams.length === 1) {
+        const fallbackLive = streams[0];
+        byId.set(assignedId, fallbackLive);
+        continue;
+      }
+      const expected = expectedById.get(assignedId);
+      byId.set(assignedId, {
+        id: assignedId,
+        name: expected?.friendly_name || expected?.umd || assignedId,
+        protocol: expected?.expected_protocol && expected.expected_protocol !== "unknown" ? expected.expected_protocol : "unknown",
+        status: "offline",
+        app: assignedId.includes("/") ? assignedId.split("/")[0] || "unknown" : "unknown",
+        stream_key: assignedId.includes("/") ? assignedId.split("/").slice(1).join("/") || assignedId : assignedId,
+        source_ip: "unknown",
+        uptime_seconds: 0,
+        viewers_current: 0,
+        outputs: {},
+        metrics: {
+          bitrate_kbps: 0,
+          fps: expected?.expected_fps ?? null,
+          scan_type: "unknown",
+          resolution: expected?.expected_resolution || "unknown",
+          video_codec: "unknown",
+          audio_codec: "unknown",
+        },
+      });
+    }
+    return byId;
+  }, [multiviewStreams, currentLayout, expectedById, liveStreamByExpectedId, streams]);
 
   useEffect(() => {
     if (!currentLayout) return;
+    const nowMs = Date.now();
+    const retryUnavailableMs = 5000;
     const assigned = Array.from(new Set(currentLayout.tiles.map((tile) => tile.assigned_stream_id).filter(Boolean))) as string[];
-    for (const streamId of assigned) {
-      if (previewByStream[streamId] !== undefined) continue;
-      setPreviewByStream((prev) => ({ ...prev, [streamId]: null }));
-      void api.getPreviewUrl(streamId).then((result) => {
+    for (const assignedId of assigned) {
+      const resolved = streamById.get(assignedId);
+      const previewStreamId = resolved?.id ?? assignedId;
+      const existingPreview = previewByStream[previewStreamId];
+      const isOffline = resolved?.status === "offline";
+      if (existingPreview !== undefined) {
+        if (isOffline || existingPreview === null || existingPreview.state !== "preview_unavailable") {
+          continue;
+        }
+        const lastRetry = previewRetryAtRef.current[previewStreamId] ?? 0;
+        if (nowMs - lastRetry < retryUnavailableMs) {
+          continue;
+        }
+      } else {
+        setPreviewByStream((prev) => ({ ...prev, [previewStreamId]: null }));
+      }
+      previewRetryAtRef.current[previewStreamId] = nowMs;
+      void api.getPreviewUrl(previewStreamId).then((result) => {
         setPreviewByStream((prev) => ({
           ...prev,
-          [streamId]: {
+          [previewStreamId]: {
             ...result,
             playback_url: normalizePlaybackUrl(result.playback_url),
           }
@@ -2100,8 +2208,8 @@ export function MultiviewerPage() {
       }).catch(() => {
         setPreviewByStream((prev) => ({
           ...prev,
-          [streamId]: {
-            stream_id: streamId,
+          [previewStreamId]: {
+            stream_id: previewStreamId,
             state: "preview_unavailable",
             source: "none",
             playback_url: null,
@@ -2110,7 +2218,7 @@ export function MultiviewerPage() {
         }));
       });
     }
-  }, [currentLayout, previewByStream]);
+  }, [currentLayout, previewByStream, streamById]);
 
   useEffect(() => {
     const previews = live.liveBundle?.preview?.previews;
@@ -2155,17 +2263,20 @@ export function MultiviewerPage() {
 
   const assignStream = useCallback(async (tileId: string, streamId: string | null) => {
     if (!currentLayout) return;
+    const selected = streamId ? streamById.get(streamId) : undefined;
+    const expected = selected ? resolveExpectedForStream(selected, expectedItems) : undefined;
+    const stableAssignedId = streamId && expected ? expected.stream_id : streamId;
     const nextTiles = currentLayout.tiles.map((tile) =>
       tile.id === tileId
         ? {
             ...tile,
-            assigned_stream_id: streamId,
-            muted: streamId ? true : tile.muted
+            assigned_stream_id: stableAssignedId,
+            muted: stableAssignedId ? true : tile.muted
           }
         : tile
     );
     await saveLayout(currentLayout, nextTiles);
-  }, [currentLayout, saveLayout]);
+  }, [currentLayout, saveLayout, streamById, expectedItems]);
 
   const toggleTileMute = useCallback(async (tileId: string) => {
     if (!currentLayout) return;
@@ -2322,7 +2433,7 @@ export function MultiviewerPage() {
       <div className={`mv-layout ${alertsDrawerOpen ? "drawer-open" : "drawer-collapsed"}`}>
         <aside className="mv-stream-list">
           <h3>Streams</h3>
-          {streams.map((stream) => (
+          {multiviewStreams.map((stream) => (
             <button
               key={stream.id}
               className={`mv-stream-chip status-${stream.status}`}
@@ -2347,14 +2458,15 @@ export function MultiviewerPage() {
                 })
               : [];
             const alarm = activeStreamAlarms[0];
-            const hasCriticalAlarm = activeStreamAlarms.some((a) => a.severity === "critical");
+            const isOffline = Boolean(stream && stream.status === "offline");
+            const hasCriticalAlarm = isOffline || activeStreamAlarms.some((a) => a.severity === "critical");
             const hasWarningAlarm = !hasCriticalAlarm && activeStreamAlarms.some((a) => a.severity === "warning");
             const showUmd = tile.show_overlay !== false;
             const isSolo = !soloTileId || soloTileId === tile.id;
             const isSoloActive = soloTileId === tile.id;
             const state =
               !stream ? "No stream assigned" :
-              stream.status === "offline" ? "Offline" :
+              isOffline ? "Offline" :
               preview === undefined || preview === null ? "Loading" :
               preview.state === "preview_unavailable" ? "Preview unavailable" : "Live";
             const playbackUrl = preview?.playback_url ?? null;
@@ -2394,6 +2506,7 @@ export function MultiviewerPage() {
                   void expandToSolo(tile.id);
                 }}
               >
+                {isOffline ? <div className="mv-offline-banner">Stream Offline</div> : null}
                 {playbackUrl && state === "Live" ? (
                   <TilePlayer
                     playbackUrl={playbackUrl}

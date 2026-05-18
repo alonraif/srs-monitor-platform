@@ -791,6 +791,25 @@ textarea {
   display: none;
 }
 
+.mv-offline-banner {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #8f3e3e;
+  background: rgba(116, 20, 20, 0.82);
+  color: #ffe3e3;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: clamp(0.62rem, 1.5cqi, 1rem);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .mv-overlay {
   position: absolute;
   left: 0;
