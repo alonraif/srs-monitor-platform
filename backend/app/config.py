@@ -51,6 +51,12 @@ class Settings(BaseModel):
     preview_force_rewrap: bool = _env_bool("PREVIEW_FORCE_REWRAP", False)
     preview_public_base_url: str = getenv("PREVIEW_PUBLIC_BASE_URL", "http://localhost:8001")
     preview_service_url: str = getenv("PREVIEW_SERVICE_URL", "http://preview-service:8001")
+    preview_auth_token: str = getenv("PREVIEW_AUTH_TOKEN", "")
+    backend_api_auth_enabled: bool = _env_bool("BACKEND_API_AUTH_ENABLED", False)
+    backend_read_api_key: str = getenv("BACKEND_READ_API_KEY", "")
+    backend_write_api_key: str = getenv("BACKEND_WRITE_API_KEY", "")
+    srs_api_username: str = getenv("SRS_API_USERNAME", "")
+    srs_api_password: str = getenv("SRS_API_PASSWORD", "")
     cors_allow_origins: list[str] = _env_list(
         "CORS_ALLOW_ORIGINS",
         ["http://localhost:3000", "http://127.0.0.1:3000"],

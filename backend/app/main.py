@@ -1,8 +1,10 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from .auth import enforce_backend_api_auth
 from .database import init_db
 from .config import get_settings
 from .routers import alarms, clients, config_streams, dashboard, health, live, multiview, preview, stream_notes, streams, system
@@ -19,7 +21,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,
-    allow_origin_regex=settings.cors_allow_origin_regex,
+    allow_origin_regex=settings.cors_allow_origin_regex or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,6 +32,16 @@ app.add_middleware(
 async def startup() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     init_db()
+
+
+@app.middleware("http")
+async def api_auth_middleware(request: Request, call_next):
+    try:
+        enforce_backend_api_auth(request)
+    except HTTPException as exc:
+        headers = getattr(exc, "headers", None)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
+    return await call_next(request)
 
 
 app.include_router(health.router, prefix="/api", tags=["health"])

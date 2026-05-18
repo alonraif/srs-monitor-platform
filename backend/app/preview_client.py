@@ -23,6 +23,7 @@ class PreviewServiceClient:
         settings = get_settings()
         self.base_url = (base_url or settings.preview_service_url).rstrip("/")
         self.timeout_seconds = timeout_seconds or settings.srs_api_timeout_seconds
+        self.auth_token = settings.preview_auth_token.strip()
 
     async def start(
         self,
@@ -51,9 +52,12 @@ class PreviewServiceClient:
 
     async def _request(self, method: str, path: str, json: JsonObject | None = None) -> PreviewServiceResult:
         url = f"{self.base_url}{path}"
+        headers: dict[str, str] = {}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.request(method=method, url=url, json=json)
+                response = await client.request(method=method, url=url, json=json, headers=headers)
             payload = response.json() if response.content else {}
             if not isinstance(payload, dict):
                 payload = {"raw": payload}

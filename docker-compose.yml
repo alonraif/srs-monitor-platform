@@ -34,6 +34,12 @@ services:
       PREVIEW_FORCE_REWRAP: "${PREVIEW_FORCE_REWRAP:-false}"
       PREVIEW_PUBLIC_BASE_URL: "${PREVIEW_PUBLIC_BASE_URL:-http://localhost:8001}"
       PREVIEW_SERVICE_URL: "${PREVIEW_SERVICE_URL:-http://preview-service:8001}"
+      PREVIEW_AUTH_TOKEN: "${PREVIEW_AUTH_TOKEN:-}"
+      BACKEND_API_AUTH_ENABLED: "${BACKEND_API_AUTH_ENABLED:-false}"
+      BACKEND_READ_API_KEY: "${BACKEND_READ_API_KEY:-}"
+      BACKEND_WRITE_API_KEY: "${BACKEND_WRITE_API_KEY:-}"
+      SRS_API_USERNAME: "${SRS_API_USERNAME:-}"
+      SRS_API_PASSWORD: "${SRS_API_PASSWORD:-}"
       CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
       CORS_ALLOW_ORIGIN_REGEX: "${CORS_ALLOW_ORIGIN_REGEX:-^https?://(localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)(:\\d+)?$}"
       SQLITE_PATH: "${SQLITE_PATH:-/data/monitor.db}"
@@ -57,6 +63,7 @@ services:
     restart: unless-stopped
     environment:
       VITE_BACKEND_API_URL: "${VITE_BACKEND_API_URL:-}"
+      VITE_BACKEND_API_KEY: "${VITE_BACKEND_API_KEY:-}"
       VITE_SRS_RTMP_PORT: "${VITE_SRS_RTMP_PORT:-1935}"
       VITE_SRS_SRT_PORT: "${VITE_SRS_SRT_PORT:-10080}"
       VITE_SRS_PUBLIC_HTTP_BASE_URL: "${VITE_SRS_PUBLIC_HTTP_BASE_URL:-http://localhost:8080}"
@@ -80,6 +87,7 @@ services:
     restart: unless-stopped
     environment:
       SRS_API_URL: "${SRS_API_URL:-http://srs:1985}"
+      PREVIEW_AUTH_TOKEN: "${PREVIEW_AUTH_TOKEN:-}"
     ports:
       - "${PREVIEW_PORT:-8001}:8001"
     volumes:

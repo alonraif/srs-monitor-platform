@@ -98,7 +98,7 @@ function frontendEnv(name: string, fallback: string): string {
 }
 
 function resolveBackendUrlForDisplay(host: string): string {
-  const fallback = `${window.location.protocol}//${host}:8000`;
+  const fallback = window.location.origin;
   const configured = frontendEnv("VITE_BACKEND_API_URL", fallback).trim();
   try {
     const parsed = new URL(configured, fallback);
@@ -173,20 +173,14 @@ function resolveSrsRtcApiBase(rawUrl: string): string | null {
   const configured = (import.meta.env.VITE_SRS_WEBRTC_API_BASE_URL as string | undefined)?.trim();
   if (configured) {
     try {
-      return new URL(configured).toString().replace(/\/$/, "");
+      return new URL(configured, window.location.origin).toString().replace(/\/$/, "");
     } catch {
       return null;
     }
   }
-  try {
-    const parsed = new URL(rawUrl.replace(/^webrtc:\/\//i, "http://"));
-    const apiProtocol = window.location.protocol === "https:" ? "https:" : "http:";
-    const apiHost = parsed.hostname || window.location.hostname;
-    const apiPort = (import.meta.env.VITE_SRS_API_PORT as string | undefined) || "1985";
-    return `${apiProtocol}//${apiHost}:${apiPort}`;
-  } catch {
-    return null;
-  }
+  // Prefer same-origin proxy route so browser clients don't need direct access
+  // to the SRS API port.
+  return `${window.location.protocol}//${window.location.host}/srs-api`;
 }
 
 function normalizeWebRtcStreamUrl(rawUrl: string): string | null {

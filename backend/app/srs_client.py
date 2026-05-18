@@ -32,11 +32,17 @@ class SrsApiClient:
         settings = get_settings()
         self.base_url = (base_url or settings.srs_api_url).rstrip("/")
         self.timeout_seconds = timeout_seconds or settings.srs_api_timeout_seconds
+        self.username = settings.srs_api_username.strip()
+        self.password = settings.srs_api_password
 
     async def fetch_snapshot(self) -> SrsApiSnapshot:
+        auth: tuple[str, str] | None = None
+        if self.username:
+            auth = (self.username, self.password)
         async with httpx.AsyncClient(
             timeout=self.timeout_seconds,
             follow_redirects=True,
+            auth=auth,
         ) as client:
             tasks = {
                 name: self._fetch_json(client, path)

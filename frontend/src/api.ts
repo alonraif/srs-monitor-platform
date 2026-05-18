@@ -16,7 +16,7 @@ import type {
 } from "./types";
 
 function resolveBackendUrl(): string {
-  const inferredBackendUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
+  const inferredBackendUrl = window.location.origin;
   const configured = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.trim();
   if (!configured) return inferredBackendUrl;
   try {
@@ -39,10 +39,16 @@ function resolveBackendUrl(): string {
 const BASE_URL = resolveBackendUrl();
 export const LIVE_URL = `${BASE_URL}/api/live`;
 let previewUrlRouteSupported: boolean | null = null;
+const BACKEND_API_KEY = (import.meta.env.VITE_BACKEND_API_KEY as string | undefined)?.trim() || "";
+
+function authHeaders(): Record<string, string> {
+  if (!BACKEND_API_KEY) return {};
+  return { Authorization: `Bearer ${BACKEND_API_KEY}` };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
     ...init
   });
   if (!response.ok) {
@@ -89,7 +95,7 @@ export const api = {
   getPreviewUrl: async (streamId: string) => {
     if (previewUrlRouteSupported !== false) {
       const primary = await fetch(`${BASE_URL}/api/preview/url/${streamId}`, {
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...authHeaders() }
       });
       if (primary.ok) {
         previewUrlRouteSupported = true;
@@ -104,7 +110,7 @@ export const api = {
     // Compatibility fallback for older backends that don't expose /preview/url.
     const fallback = await fetch(`${BASE_URL}/api/preview/start`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ stream_id: streamId, inactivity_timeout_seconds: 60 })
     });
     if (fallback.status === 404) {

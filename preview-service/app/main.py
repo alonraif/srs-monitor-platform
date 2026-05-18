@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .security import require_preview_token
 
 PREVIEW_ROOT = Path("/var/preview")
 ALLOWED_VIDEO_CODECS = {"h264", "avc1"}
@@ -403,23 +404,32 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/preview/start", response_model=PreviewStatus)
-async def preview_start(payload: StartPreviewRequest) -> PreviewStatus:
+async def preview_start(
+    payload: StartPreviewRequest,
+    _: None = Depends(require_preview_token),
+) -> PreviewStatus:
     return await manager.start(payload)
 
 
 @app.post("/preview/stop", response_model=PreviewStatus)
-async def preview_stop(payload: StopPreviewRequest) -> PreviewStatus:
+async def preview_stop(
+    payload: StopPreviewRequest,
+    _: None = Depends(require_preview_token),
+) -> PreviewStatus:
     return await manager.stop(payload.stream_id)
 
 
 @app.get("/preview/status", response_model=PreviewStatusResponse)
-async def preview_status() -> PreviewStatusResponse:
+async def preview_status(_: None = Depends(require_preview_token)) -> PreviewStatusResponse:
     items = await manager.status()
     return PreviewStatusResponse(generated_at=_iso(_now()) or "", previews=items)
 
 
 @app.get("/preview/status/{stream_id}", response_model=PreviewStatus)
-async def preview_status_stream(stream_id: str) -> PreviewStatus:
+async def preview_status_stream(
+    stream_id: str,
+    _: None = Depends(require_preview_token),
+) -> PreviewStatus:
     items = await manager.status(stream_id=stream_id)
     if not items:
         raise HTTPException(status_code=404, detail=f"Stream '{stream_id}' not found")
