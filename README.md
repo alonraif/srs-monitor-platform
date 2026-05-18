@@ -175,6 +175,13 @@ http://localhost:8080/live/test.flv
 
 ## Operations Guide
 
+Security hardening and deployment profile guidance:
+
+- `docs/security-deployment-profiles.md`
+- `deploy/nginx/single-host.conf`
+- `deploy/nginx/split-host-server-b.conf`
+- `deploy/nginx/split-host-server-a-srs-api.conf`
+
 ### 1) Publish Streams Into SRS
 
 Use your SRS host/IP instead of `localhost` when publishing from another machine.
