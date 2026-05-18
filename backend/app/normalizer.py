@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from ipaddress import ip_address, ip_network
 from typing import Any
 
 from .config import get_settings
@@ -179,11 +180,64 @@ def _is_external_playback_client(raw: JsonObject) -> bool:
     is_playback = (publish_flag is False) or ("play" in ctype)
     if not is_playback:
         return False
+    if _is_internal_service_client(raw):
+        return False
     ip = _unknown(raw.get("ip"))
     # Keep unknown IPs out of viewer counts, but include private/LAN viewers.
     if ip == "unknown":
         return False
     return True
+
+
+def _is_internal_service_client(raw: JsonObject) -> bool:
+    # Exclude known internal monitoring/probe consumers so viewer metrics
+    # reflect only real audience clients.
+    searchable = " ".join(
+        str(value).lower()
+        for value in (
+            raw.get("user_agent"),
+            raw.get("agent"),
+            raw.get("name"),
+            raw.get("service"),
+            raw.get("type"),
+        )
+        if value is not None
+    )
+    internal_markers = (
+        "ffprobe",
+        "ffmpeg",
+        "libavformat",
+        "lavf/",
+        "preview-service",
+        "multiview",
+        "monitor-backend",
+    )
+    if any(marker in searchable for marker in internal_markers):
+        return True
+
+    # Multiviewer-internal WebRTC pulls commonly show up as rtc-play with no
+    # browser page/user-agent and an internal RFC1918 source IP.
+    ctype = _unknown(raw.get("type")).lower()
+    page_url = str(raw.get("pageUrl") or raw.get("page_url") or "").strip()
+    user_agent = str(raw.get("user_agent") or raw.get("agent") or "").strip().lower()
+    ip = str(raw.get("ip") or "").strip()
+    if "rtc-play" in ctype and not page_url and user_agent in {"", "unknown"} and _is_rfc1918_ip(ip):
+        return True
+
+    return False
+
+
+def _is_rfc1918_ip(value: str) -> bool:
+    try:
+        addr = ip_address(value)
+    except ValueError:
+        return False
+    private_ranges = (
+        ip_network("10.0.0.0/8"),
+        ip_network("172.16.0.0/12"),
+        ip_network("192.168.0.0/16"),
+    )
+    return any(addr in net for net in private_ranges)
 
 
 def _publisher_alive_seconds_by_cid(clients_response: JsonObject | None) -> dict[str, int]:
