@@ -182,6 +182,40 @@ Security hardening and deployment profile guidance:
 - `deploy/nginx/split-host-server-b.conf`
 - `deploy/nginx/split-host-server-a-srs-api.conf`
 
+Phase 1 compose overlays (proxy + control-plane port reduction):
+
+- `deploy/compose/docker-compose.phase1.single-host.yml`
+- `deploy/compose/docker-compose.phase1.split-host-monitor.yml`
+- `deploy/compose/docker-compose.phase1.split-host-srs.yml`
+
+Phase 1 usage:
+
+Single-host:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose/docker-compose.phase1.single-host.yml up --build -d
+```
+
+Split-host (Server B monitor stack):
+
+```bash
+docker compose -f docker-compose.app.yml -f deploy/compose/docker-compose.phase1.split-host-monitor.yml up --build -d
+```
+
+Split-host (Server A SRS stack):
+
+```bash
+docker compose -f docker-compose.srs.yml -f deploy/compose/docker-compose.phase1.split-host-srs.yml up --build -d
+```
+
+TLS certificates are expected at:
+
+- `deploy/nginx/certs/fullchain.pem`
+- `deploy/nginx/certs/privkey.pem`
+
+If either file is missing, Phase 1 proxy containers auto-generate a self-signed
+certificate at startup.
+
 ### 1) Publish Streams Into SRS
 
 Use your SRS host/IP instead of `localhost` when publishing from another machine.
