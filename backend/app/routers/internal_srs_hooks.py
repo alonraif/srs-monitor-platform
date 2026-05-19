@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 
 from ..config import get_settings
+from ..publisher_ip_cache import remember_publish_ip
 from ..stream_auth import evaluate_stream_auth, hook_response
 
 
@@ -23,6 +24,14 @@ async def _handle_hook(request: Request, action: Literal["publish", "play"], sec
     payload = await request.json()
     if not isinstance(payload, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_hook_payload")
+
+    if action == "publish":
+        remember_publish_ip(
+            ip=str(payload.get("ip") or payload.get("client_ip") or "").strip(),
+            app=str(payload.get("app") or "").strip(),
+            stream=str(payload.get("stream") or "").strip(),
+            stream_id=str(payload.get("stream_url") or "").strip(),
+        )
 
     decision = evaluate_stream_auth(payload, action)
     code = hook_response(decision)

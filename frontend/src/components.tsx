@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 const navItems = [
   { label: "Dashboard", to: "/" },
   { label: "Streams", to: "/streams" },
-  { label: "Alarms", to: "/alarms" },
   { label: "Expected Streams", to: "/expected-streams" },
   { label: "Multiviewer", to: "/multiviewer" },
+  { label: "Alerts", to: "/alarms" },
   { label: "Settings", to: "/settings" }
 ];
 

@@ -27,6 +27,7 @@ from .models import (
     StreamsResponse,
     SystemResponse,
 )
+from .publisher_ip_cache import resolve_publish_ip
 from .srs_client import SrsApiSnapshot
 
 
@@ -319,6 +320,10 @@ def _normalize_stream(
         # Some SRS builds only expose publisher cid on /streams and actual IP on
         # /clients. We join by cid when available.
         source_ip = publisher_ip_by_cid.get(source_cid, "unknown")
+    if source_ip == "unknown":
+        cached_ip = resolve_publish_ip(app=app, stream=stream_name, stream_id=stream_id)
+        if cached_ip:
+            source_ip = cached_ip
 
     fps = _as_float(video.get("fps") or raw.get("fps"))
     if fps is None:

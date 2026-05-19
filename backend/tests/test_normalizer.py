@@ -1,4 +1,5 @@
 from backend.app.normalizer import normalize_clients, normalize_streams
+from backend.app.publisher_ip_cache import remember_publish_ip
 from backend.app.srs_client import SrsApiSnapshot
 
 
@@ -130,3 +131,30 @@ def test_viewer_counts_exclude_internal_multiview_rtc_play():
     clients = normalize_clients(snapshot)
     assert streams[0].viewers_current == 0
     assert len(clients) == 0
+
+
+def test_source_ip_falls_back_to_publish_hook_cache_when_clients_missing():
+    remember_publish_ip(ip="172.16.32.99", app="live", stream="SRT-Test", stream_id="live/SRT-Test")
+    snapshot = SrsApiSnapshot(
+        base_url="http://srs:1985",
+        reachable=True,
+        responses={
+            "streams": {
+                "code": 0,
+                "streams": [
+                    {
+                        "id": "vid-52r5713",
+                        "name": "SRT-Test",
+                        "app": "live",
+                        "publish": {"active": True, "cid": "71r379ko"},
+                    }
+                ],
+            },
+            # Intentionally omit matching publisher row in /clients.
+            "clients": {"code": 0, "clients": []},
+        },
+        errors={},
+    )
+
+    streams = normalize_streams(snapshot)
+    assert streams[0].source_ip == "172.16.32.99"
