@@ -12,6 +12,34 @@ body {
   margin: 0;
   background: radial-gradient(circle at top left, #132235, #0a0f18 50%);
   color: #d9e3f0;
+  scrollbar-width: thin;
+  scrollbar-color: #3f5f7f #091528;
+}
+
+/* Global scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f5f7f #091528;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #091528;
+  border-radius: 12px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #5e83a9 0%, #3f5f7f 100%);
+  border: 2px solid #091528;
+  border-radius: 12px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #6e94bd 0%, #4b7096 100%);
 }
 
 a {
@@ -267,6 +295,32 @@ h2 {
 
 .table-scroll {
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #4a6b8e #081321;
+}
+
+.table-scroll::-webkit-scrollbar,
+.settings-table-wrap::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.table-scroll::-webkit-scrollbar-track,
+.settings-table-wrap::-webkit-scrollbar-track {
+  background: #081321;
+  border-radius: 10px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb,
+.settings-table-wrap::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #5f84ac 0%, #47678a 100%);
+  border: 1px solid #081321;
+  border-radius: 10px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover,
+.settings-table-wrap::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #6c95c2 0%, #557ba4 100%);
 }
 
 .table-scroll.top5-window {

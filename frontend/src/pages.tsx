@@ -3077,7 +3077,6 @@ export function PenaltyBoxPage() {
       <div className="penalty-box-head">
         <div>
           <h2>Penalty Box</h2>
-          <span className="penalty-box-subtitle">4x2 stream focus: active warning/critical alerts only</span>
         </div>
         <div className="penalty-box-controls">
           <button onClick={() => setShowSuppressed((value) => !value)}>
