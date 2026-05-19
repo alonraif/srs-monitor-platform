@@ -1743,12 +1743,14 @@ function TilePlayer({
   muted,
   scanType,
   protocol,
+  targetAspectRatio,
   children
 }: {
   playbackUrl: string | null;
   muted: boolean;
   scanType: "progressive" | "interlaced" | "unknown";
   protocol: string | null | undefined;
+  targetAspectRatio?: number;
   children?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1774,7 +1776,7 @@ function TilePlayer({
         raf = window.requestAnimationFrame(resize);
         return;
       }
-      const target = 16 / 9;
+      const target = targetAspectRatio && targetAspectRatio > 0 ? targetAspectRatio : 16 / 9;
       const current = w / h;
       if (current > target) {
         const nh = h;
@@ -1807,7 +1809,7 @@ function TilePlayer({
       ro?.disconnect();
       window.removeEventListener("resize", onWindowResize);
     };
-  }, []);
+  }, [targetAspectRatio]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2773,6 +2775,425 @@ export function MultiviewerPage() {
           ) : null}
         </aside>
       </div>
+    </section>
+  );
+}
+
+export function PenaltyBoxPage() {
+  const [previewByStream, setPreviewByStream] = useState<Record<string, PreviewResolveResponse | null>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [suppressedByAck, setSuppressedByAck] = useState<Record<string, boolean>>({});
+  const [showSuppressed, setShowSuppressed] = useState(false);
+  const previewRetryAtRef = useRef<Record<string, number>>({});
+
+  const loader = useCallback(
+    () => Promise.all([api.getStreams(), api.getAlarms(), api.getMultiviewLayouts(), api.getExpectedStreams()]),
+    []
+  );
+  const mergeLive = useCallback(
+    (
+      current: [Awaited<ReturnType<typeof api.getStreams>>, Awaited<ReturnType<typeof api.getAlarms>>, Awaited<ReturnType<typeof api.getMultiviewLayouts>>, Awaited<ReturnType<typeof api.getExpectedStreams>>] | null,
+      live: { streams: Awaited<ReturnType<typeof api.getStreams>>; alarms: Awaited<ReturnType<typeof api.getAlarms>> }
+    ) => {
+      if (!current) {
+        return [
+          live.streams,
+          live.alarms,
+          { total: 0, layouts: [] },
+          { total: 0, streams: [] }
+        ] as const;
+      }
+      return [live.streams, live.alarms, current[2], current[3]] as const;
+    },
+    []
+  );
+  const live = useLiveBundle(loader, mergeLive, 4000);
+  const effectiveData = live.data;
+  const streams = effectiveData?.[0].streams ?? [];
+  const alarms = effectiveData?.[1].alarms ?? [];
+  const layouts = effectiveData?.[2].layouts ?? [];
+  const expectedItems = effectiveData?.[3].streams ?? [];
+
+  const currentLayout = useMemo(() => {
+    if (!layouts.length) return null;
+    return layouts.find((layout) => layout.is_default) ?? layouts[0];
+  }, [layouts]);
+
+  const expectedById = useMemo(() => {
+    const byId = new Map<string, ExpectedStream>();
+    for (const expected of expectedItems) {
+      byId.set(String(expected.stream_id || "").trim(), expected);
+    }
+    return byId;
+  }, [expectedItems]);
+
+  const multiviewStreams = useMemo(() => {
+    const byId = new Map(streams.map((stream) => [stream.id, stream] as const));
+    const liveStreamTokens = streams.map((stream) => streamMatchTokens(stream));
+    for (const expected of expectedItems) {
+      const streamId = String(expected.stream_id || "").trim();
+      if (!streamId || byId.has(streamId)) continue;
+      const matchedLive = liveStreamTokens.some((tokens) => tokens.has(streamId));
+      if (matchedLive) continue;
+      byId.set(streamId, {
+        id: streamId,
+        name: expected.friendly_name || expected.umd || streamId,
+        protocol: expected.expected_protocol && expected.expected_protocol !== "unknown" ? expected.expected_protocol : "unknown",
+        status: "offline",
+        app: streamId.includes("/") ? streamId.split("/")[0] || "unknown" : "unknown",
+        stream_key: streamId.includes("/") ? streamId.split("/").slice(1).join("/") || streamId : streamId,
+        source_ip: "unknown",
+        uptime_seconds: 0,
+        viewers_current: 0,
+        outputs: {},
+        metrics: {
+          bitrate_kbps: 0,
+          fps: expected.expected_fps ?? null,
+          scan_type: "unknown",
+          resolution: expected.expected_resolution || "unknown",
+          video_codec: "unknown",
+          audio_codec: "unknown",
+        },
+      });
+    }
+    return Array.from(byId.values());
+  }, [streams, expectedItems]);
+
+  const liveStreamByExpectedId = useMemo(() => {
+    const match = new Map<string, Stream>();
+    for (const expected of expectedItems) {
+      const expectedId = String(expected.stream_id || "").trim();
+      if (!expectedId) continue;
+      const found = streams.find((stream) => streamMatchTokens(stream).has(expectedId));
+      if (found) match.set(expectedId, found);
+    }
+    return match;
+  }, [streams, expectedItems]);
+
+  const streamById = useMemo(() => {
+    const byId = new Map(multiviewStreams.map((stream) => [stream.id, stream] as const));
+    const assignedStreamIds = Array.from(new Set((currentLayout?.tiles ?? []).map((tile) => tile.assigned_stream_id).filter(Boolean))) as string[];
+    for (const assignedId of assignedStreamIds) {
+      if (byId.has(assignedId)) continue;
+      const matchedLive = liveStreamByExpectedId.get(assignedId);
+      if (matchedLive) {
+        byId.set(assignedId, matchedLive);
+        continue;
+      }
+      const expected = expectedById.get(assignedId);
+      byId.set(assignedId, {
+        id: assignedId,
+        name: expected?.friendly_name || expected?.umd || assignedId,
+        protocol: expected?.expected_protocol && expected.expected_protocol !== "unknown" ? expected.expected_protocol : "unknown",
+        status: "offline",
+        app: assignedId.includes("/") ? assignedId.split("/")[0] || "unknown" : "unknown",
+        stream_key: assignedId.includes("/") ? assignedId.split("/").slice(1).join("/") || assignedId : assignedId,
+        source_ip: "unknown",
+        uptime_seconds: 0,
+        viewers_current: 0,
+        outputs: {},
+        metrics: {
+          bitrate_kbps: 0,
+          fps: expected?.expected_fps ?? null,
+          scan_type: "unknown",
+          resolution: expected?.expected_resolution || "unknown",
+          video_codec: "unknown",
+          audio_codec: "unknown",
+        },
+      });
+    }
+    return byId;
+  }, [multiviewStreams, currentLayout, liveStreamByExpectedId, expectedById]);
+
+  const warningCriticalAlarms = useMemo(
+    () => alarms.filter((alarm) => alarm.status !== "resolved" && (alarm.severity === "warning" || alarm.severity === "critical")),
+    [alarms]
+  );
+
+  const penaltyItems = useMemo(() => {
+    const assigned = (currentLayout?.tiles ?? [])
+      .map((tile) => tile.assigned_stream_id)
+      .filter(Boolean) as string[];
+    const uniqueAssigned = Array.from(new Set(assigned));
+    const items = uniqueAssigned.map((assignedId) => {
+      const stream = streamById.get(assignedId);
+      if (!stream) return null;
+      const streamAlerts = warningCriticalAlarms
+        .filter((alarm) => alarm.stream_id && alarmMatchesStream(alarm.stream_id, stream))
+        .sort((a, b) => {
+          const sev = (a.severity === "critical" ? 2 : 1) - (b.severity === "critical" ? 2 : 1);
+          if (sev !== 0) return -sev;
+          return new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime();
+        });
+      if (!streamAlerts.length) return null;
+      return {
+        stream,
+        expected: resolveExpectedForStream(stream, expectedItems),
+        alerts: streamAlerts,
+      };
+    }).filter(Boolean) as Array<{ stream: Stream; expected: ExpectedStream | undefined; alerts: typeof warningCriticalAlarms }>;
+
+    const unsuppressed = items
+      .filter((item) => !suppressedByAck[item.stream.id])
+      .sort((a, b) => {
+        const aCritical = a.alerts.some((alarm) => alarm.severity === "critical");
+        const bCritical = b.alerts.some((alarm) => alarm.severity === "critical");
+        if (aCritical !== bCritical) return aCritical ? -1 : 1;
+        const aLatest = Math.max(...a.alerts.map((alarm) => new Date(alarm.last_seen).getTime()));
+        const bLatest = Math.max(...b.alerts.map((alarm) => new Date(alarm.last_seen).getTime()));
+        return bLatest - aLatest;
+      });
+    return unsuppressed.slice(0, 8);
+  }, [currentLayout, streamById, warningCriticalAlarms, expectedItems, suppressedByAck]);
+
+  const suppressedItems = useMemo(() => {
+    const assigned = (currentLayout?.tiles ?? [])
+      .map((tile) => tile.assigned_stream_id)
+      .filter(Boolean) as string[];
+    const uniqueAssigned = Array.from(new Set(assigned));
+    return uniqueAssigned
+      .map((assignedId) => {
+        const stream = streamById.get(assignedId);
+        if (!stream) return null;
+        if (!suppressedByAck[stream.id]) return null;
+        const streamAlerts = warningCriticalAlarms
+          .filter((alarm) => alarm.stream_id && alarmMatchesStream(alarm.stream_id, stream))
+          .sort((a, b) => {
+            const sev = (a.severity === "critical" ? 2 : 1) - (b.severity === "critical" ? 2 : 1);
+            if (sev !== 0) return -sev;
+            return new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime();
+          });
+        if (!streamAlerts.length) return null;
+        return {
+          stream,
+          expected: resolveExpectedForStream(stream, expectedItems),
+          alerts: streamAlerts,
+        };
+      })
+      .filter(Boolean) as Array<{ stream: Stream; expected: ExpectedStream | undefined; alerts: typeof warningCriticalAlarms }>;
+  }, [currentLayout, expectedItems, streamById, suppressedByAck, warningCriticalAlarms]);
+
+  useEffect(() => {
+    // Re-enable previously removed tiles when their warning/critical alarms clear.
+    setSuppressedByAck((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const streamId of Object.keys(prev)) {
+        const hasActive = warningCriticalAlarms.some((alarm) => {
+          const stream = streamById.get(streamId);
+          return Boolean(stream && alarm.stream_id && alarmMatchesStream(alarm.stream_id, stream));
+        });
+        if (hasActive) next[streamId] = true;
+      }
+      return next;
+    });
+  }, [warningCriticalAlarms, streamById]);
+
+  useEffect(() => {
+    const nowMs = Date.now();
+    const retryUnavailableMs = 5000;
+    for (const item of penaltyItems) {
+      const previewStreamId = item.stream.id;
+      const existingPreview = previewByStream[previewStreamId];
+      if (existingPreview !== undefined) {
+        if (existingPreview === null || existingPreview.state !== "preview_unavailable") continue;
+        const lastRetry = previewRetryAtRef.current[previewStreamId] ?? 0;
+        if (nowMs - lastRetry < retryUnavailableMs) continue;
+      } else {
+        setPreviewByStream((prev) => ({ ...prev, [previewStreamId]: null }));
+      }
+      previewRetryAtRef.current[previewStreamId] = nowMs;
+      void api.getPreviewUrl(previewStreamId).then((result) => {
+        setPreviewByStream((prev) => ({
+          ...prev,
+          [previewStreamId]: {
+            ...result,
+            playback_url: normalizePlaybackUrl(result.playback_url),
+          }
+        }));
+      }).catch(() => {
+        setPreviewByStream((prev) => ({
+          ...prev,
+          [previewStreamId]: {
+            stream_id: previewStreamId,
+            state: "preview_unavailable",
+            source: "none",
+            playback_url: null,
+            reason: "preview_request_failed",
+          }
+        }));
+      });
+    }
+  }, [penaltyItems, previewByStream]);
+
+  useEffect(() => {
+    const previews = live.liveBundle?.preview?.previews;
+    if (!Array.isArray(previews)) return;
+    const updates: Record<string, PreviewResolveResponse> = {};
+    for (const item of previews) {
+      const streamId = typeof item.stream_id === "string" ? item.stream_id : null;
+      if (!streamId) continue;
+      const state = item.state === "running" ? "preview_started" : item.state === "preview_unavailable" ? "preview_unavailable" : "preview_started";
+      updates[streamId] = {
+        stream_id: streamId,
+        state,
+        source: "preview_hls",
+        playback_url: normalizePlaybackUrl(typeof item.preview_url === "string" ? item.preview_url : null),
+        reason: typeof item.reason === "string" ? item.reason : null,
+      };
+    }
+    if (!Object.keys(updates).length) return;
+    setPreviewByStream((prev) => ({ ...prev, ...updates }));
+  }, [live.liveBundle]);
+
+  async function onAck(item: { stream: Stream; alerts: typeof warningCriticalAlarms }, alarmId: string, ack: boolean) {
+    setActionError(null);
+    try {
+      if (ack) {
+        const remove = window.confirm("Acknowledge this alert and remove this stream from Penalty Box?");
+        await api.ackAlarm(alarmId);
+        if (remove) {
+          setSuppressedByAck((prev) => ({ ...prev, [item.stream.id]: true }));
+        }
+      } else {
+        await api.unackAlarm(alarmId);
+        setSuppressedByAck((prev) => {
+          const next = { ...prev };
+          delete next[item.stream.id];
+          return next;
+        });
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Alarm action failed");
+    }
+  }
+
+  if (live.loading) return <LoadingState />;
+  if (live.error || !effectiveData) return <ErrorState error={live.error || "Failed loading penalty box"} />;
+
+  const fillCount = Math.max(0, 8 - penaltyItems.length);
+
+  return (
+    <section className="panel penalty-box-page">
+      <div className="penalty-box-head">
+        <div>
+          <h2>Penalty Box</h2>
+          <span className="penalty-box-subtitle">4x2 stream focus: active warning/critical alerts only</span>
+        </div>
+        <div className="penalty-box-controls">
+          <button onClick={() => setShowSuppressed((value) => !value)}>
+            {showSuppressed ? "Hide Suppressed" : `Show Suppressed (${suppressedItems.length})`}
+          </button>
+          <button
+            onClick={() => setSuppressedByAck({})}
+            disabled={suppressedItems.length === 0}
+          >
+            Restore All
+          </button>
+        </div>
+      </div>
+      {actionError ? <ErrorState error={actionError} /> : null}
+      {penaltyItems.length === 0 ? <EmptyState message="No streams currently in the penalty box." /> : null}
+      <div className="penalty-grid">
+        {penaltyItems.map((item) => {
+          const preview = previewByStream[item.stream.id];
+          const playbackUrl = preview?.playback_url ?? null;
+          const isOffline = item.stream.status === "offline";
+          const state =
+            isOffline ? "Offline" :
+            preview === undefined || preview === null ? "Loading" :
+            preview.state === "preview_unavailable" ? "Preview unavailable" : "Live";
+          return (
+            <article key={item.stream.id} className="penalty-tile">
+              <div className="penalty-video-wrap">
+                {isOffline ? <div className="mv-offline-banner">Stream Offline</div> : null}
+                {playbackUrl && state === "Live" ? (
+                  <TilePlayer
+                    playbackUrl={playbackUrl}
+                    muted
+                    scanType={item.stream.metrics.scan_type ?? "unknown"}
+                    protocol={item.stream.protocol}
+                  >
+                    <div className="mv-state">{state}</div>
+                    <div className="mv-overlay">
+                      <div className="mv-ov-head">
+                        <span>{item.expected?.umd || item.expected?.friendly_name || item.stream.name || item.stream.id}</span>
+                      </div>
+                    </div>
+                  </TilePlayer>
+                ) : (
+                  <>
+                    <div className="mv-state">{state}{preview?.reason ? `: ${preview.reason}` : ""}</div>
+                    <div className="mv-overlay">
+                      <div className="mv-ov-head">
+                        <span>{item.expected?.umd || item.expected?.friendly_name || item.stream.name || item.stream.id}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="penalty-alerts">
+                <div className="penalty-alerts-title">{item.stream.name} alerts</div>
+                <ul className="penalty-alert-list">
+                  {item.alerts.map((alarm) => (
+                    <li key={`${item.stream.id}-${alarm.id}`} className="penalty-alert-row">
+                      <div className="penalty-alert-main">
+                        <span className={`health health-${alarm.severity === "critical" ? "red" : "yellow"}`}>{alarm.severity}</span>
+                        <span className="penalty-alert-title">{alarm.title}</span>
+                      </div>
+                      <div className="penalty-alert-meta">
+                        <span>{new Date(alarm.last_seen).toLocaleTimeString()}</span>
+                        {alarm.status === "acknowledged" ? (
+                          <button onClick={() => void onAck(item, alarm.id, false)}>Unack</button>
+                        ) : (
+                          <button onClick={() => void onAck(item, alarm.id, true)}>Ack</button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </article>
+          );
+        })}
+        {Array.from({ length: fillCount }).map((_, idx) => (
+          <article key={`empty-${idx}`} className="penalty-tile penalty-empty">
+            <div className="penalty-video-wrap"><div className="mv-state">Empty</div></div>
+            <div className="penalty-alerts"><div className="penalty-alerts-title">No alert stream</div></div>
+          </article>
+        ))}
+      </div>
+      {showSuppressed ? (
+        <div className="penalty-suppressed">
+          <h3 className="subhead">Suppressed Streams</h3>
+          {suppressedItems.length === 0 ? (
+            <EmptyState message="No suppressed streams." />
+          ) : (
+            <ul className="penalty-suppressed-list">
+              {suppressedItems.map((item) => (
+                <li key={`suppressed-${item.stream.id}`} className="penalty-suppressed-row">
+                  <div>
+                    <strong>{item.expected?.umd || item.stream.name || item.stream.id}</strong>
+                    <div className="penalty-suppressed-meta">
+                      {item.alerts.length} active warning/critical alert{item.alerts.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setSuppressedByAck((prev) => {
+                        const next = { ...prev };
+                        delete next[item.stream.id];
+                        return next;
+                      })
+                    }
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

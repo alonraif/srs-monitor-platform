@@ -40,17 +40,28 @@ function resolveBackendUrl(): string {
 const BASE_URL = resolveBackendUrl();
 export const LIVE_URL = `${BASE_URL}/api/live`;
 let previewUrlRouteSupported: boolean | null = null;
-const BACKEND_API_KEY = (import.meta.env.VITE_BACKEND_API_KEY as string | undefined)?.trim() || "";
+const BACKEND_READ_API_KEY = (import.meta.env.VITE_BACKEND_API_KEY as string | undefined)?.trim() || "";
+const BACKEND_WRITE_API_KEY =
+  (import.meta.env.VITE_BACKEND_WRITE_API_KEY as string | undefined)?.trim() || BACKEND_READ_API_KEY;
 
-function authHeaders(): Record<string, string> {
-  if (!BACKEND_API_KEY) return {};
-  return { Authorization: `Bearer ${BACKEND_API_KEY}` };
+function authHeaders(method = "GET"): Record<string, string> {
+  const upper = method.toUpperCase();
+  const isSafe = upper === "GET" || upper === "HEAD" || upper === "OPTIONS";
+  const token = isSafe ? BACKEND_READ_API_KEY : BACKEND_WRITE_API_KEY;
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method || "GET").toUpperCase();
+  const mergedHeaders = {
+    "Content-Type": "application/json",
+    ...authHeaders(method),
+    ...((init?.headers as Record<string, string> | undefined) || {}),
+  };
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
-    ...init
+    ...init,
+    headers: mergedHeaders,
   });
   if (!response.ok) {
     const text = await response.text();
@@ -99,7 +110,7 @@ export const api = {
   getPreviewUrl: async (streamId: string) => {
     if (previewUrlRouteSupported !== false) {
       const primary = await fetch(`${BASE_URL}/api/preview/url/${streamId}`, {
-        headers: { "Content-Type": "application/json", ...authHeaders() }
+        headers: { "Content-Type": "application/json", ...authHeaders("GET") }
       });
       if (primary.ok) {
         previewUrlRouteSupported = true;
@@ -114,7 +125,7 @@ export const api = {
     // Compatibility fallback for older backends that don't expose /preview/url.
     const fallback = await fetch(`${BASE_URL}/api/preview/start`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: { "Content-Type": "application/json", ...authHeaders("POST") },
       body: JSON.stringify({ stream_id: streamId, inactivity_timeout_seconds: 60 })
     });
     if (fallback.status === 404) {

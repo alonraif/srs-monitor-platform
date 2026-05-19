@@ -6,6 +6,7 @@ import {
   DashboardPage,
   ExpectedStreamsPage,
   MultiviewerPage,
+  PenaltyBoxPage,
   SettingsPage,
   StreamDetailPage,
   StreamsPage
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/alarms" element={<AlarmsPage />} />
         <Route path="/expected-streams" element={<ExpectedStreamsPage />} />
         <Route path="/multiviewer" element={<MultiviewerPage />} />
+        <Route path="/penalty-box" element={<PenaltyBoxPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

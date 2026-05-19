@@ -1164,6 +1164,145 @@ textarea {
   font-size: 0.8rem;
 }
 
+.penalty-box-page {
+  display: grid;
+  gap: 12px;
+}
+
+.penalty-box-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.penalty-box-subtitle {
+  color: #88a4c0;
+  font-size: 0.82rem;
+}
+
+.penalty-box-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.penalty-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.penalty-tile {
+  border: 1px solid #1d3d59;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0b1626;
+  display: grid;
+  grid-template-rows: auto minmax(150px, auto);
+  min-height: 0;
+}
+
+.penalty-video-wrap {
+  position: relative;
+  background: #091322;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.penalty-video-wrap .mv-video {
+  object-fit: contain;
+}
+
+.penalty-alerts {
+  border-top: 1px solid #1d3d59;
+  background: #0f1f33;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.penalty-alerts-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: #8ca9c5;
+}
+
+.penalty-alert-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.penalty-alert-row {
+  border: 1px solid #1d3248;
+  border-radius: 6px;
+  padding: 8px;
+  background: #0d1a2a;
+  display: grid;
+  gap: 6px;
+}
+
+.penalty-alert-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.penalty-alert-title {
+  font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.penalty-alert-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  color: #89a5bf;
+  font-size: 0.76rem;
+}
+
+.penalty-empty {
+  opacity: 0.75;
+}
+
+.penalty-suppressed {
+  border: 1px solid #1d3248;
+  border-radius: 6px;
+  padding: 10px;
+  background: #0c1828;
+}
+
+.penalty-suppressed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.penalty-suppressed-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #1d3248;
+  border-radius: 6px;
+  background: #0f1f33;
+  padding: 8px;
+}
+
+.penalty-suppressed-meta {
+  color: #89a5bf;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1206,5 +1345,20 @@ textarea {
 
   .dashboard-layout > .panel {
     grid-column: span 12 !important;
+  }
+
+  .penalty-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .penalty-box-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .penalty-grid {
+    grid-template-columns: 1fr;
   }
 }

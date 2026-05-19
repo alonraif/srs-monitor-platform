@@ -58,6 +58,7 @@ Open:
 `PREVIEW_PUBLIC_BASE_URL` public preview-service base URL
 `VITE_BACKEND_API_URL` frontend API base URL
 `VITE_BACKEND_API_KEY` optional bearer key sent by frontend to backend API
+`VITE_BACKEND_WRITE_API_KEY` optional bearer key for frontend write requests; defaults to `VITE_BACKEND_API_KEY` if unset
 `VITE_SRS_RTMP_PORT`, `VITE_SRS_SRT_PORT` frontend-visible ingest ports
 `VITE_SRS_PUBLIC_HTTP_BASE_URL`, `VITE_SRS_PUBLIC_WEBRTC_BASE_URL` frontend-visible SRS public URLs
 `VITE_SRS_WEBRTC_API_BASE_URL` frontend-visible SRS RTC API base (used for `/rtc/v1/play/`); in Phase 1/2 single-host prefer `/srs-api`

@@ -6,6 +6,7 @@ const navItems = [
   { label: "Streams", to: "/streams" },
   { label: "Expected Streams", to: "/expected-streams" },
   { label: "Multiviewer", to: "/multiviewer" },
+  { label: "Penalty Box", to: "/penalty-box" },
   { label: "Alerts", to: "/alarms" },
   { label: "Settings", to: "/settings" }
 ];
