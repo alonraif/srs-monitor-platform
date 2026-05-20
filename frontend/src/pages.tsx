@@ -179,9 +179,12 @@ function resolveSrsRtcApiBase(rawUrl: string): string | null {
       return null;
     }
   }
-  // Prefer same-origin proxy route so browser clients don't need direct access
-  // to the SRS API port.
-  return `${window.location.protocol}//${window.location.host}/srs-api`;
+  // In local dev, use the Vite proxy route when available.
+  if (import.meta.env.DEV) {
+    return `${window.location.protocol}//${window.location.host}/srs-api`;
+  }
+  // In non-dev environments default directly to the SRS API port.
+  return `${window.location.protocol}//${window.location.hostname}:1985`;
 }
 
 function normalizeWebRtcStreamUrl(rawUrl: string): string | null {
@@ -1853,6 +1856,15 @@ function TilePlayer({
             }),
           });
           if (!response.ok) throw new Error(`webrtc_offer_failed_${response.status}`);
+          const contentType = (response.headers.get("content-type") || "").toLowerCase();
+          if (!contentType.includes("application/json")) {
+            const text = await response.text();
+            const snippet = text.slice(0, 140).trim();
+            throw new Error(
+              `Expected JSON from ${apiBase}/rtc/v1/play/, got ${contentType || "unknown content-type"}.` +
+                (snippet ? ` Response starts with: ${snippet}` : "")
+            );
+          }
           const payload = (await response.json()) as { code?: number; sdp?: string };
           if (payload.code && payload.code !== 0) throw new Error(`webrtc_offer_error_${payload.code}`);
           if (!payload.sdp) throw new Error("webrtc_missing_answer");
@@ -2983,6 +2995,12 @@ export function PenaltyBoxPage() {
           return Boolean(stream && alarm.stream_id && alarmMatchesStream(alarm.stream_id, stream));
         });
         if (hasActive) next[streamId] = true;
+      }
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length) {
+        const same = prevKeys.every((key) => next[key] === true);
+        if (same) return prev;
       }
       return next;
     });

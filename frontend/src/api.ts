@@ -17,7 +17,11 @@ import type {
 } from "./types";
 
 function resolveBackendUrl(): string {
-  const inferredBackendUrl = window.location.origin;
+  const current = new URL(window.location.origin);
+  const inferredBackendUrl =
+    import.meta.env.DEV && current.port === "3000"
+      ? `${current.protocol}//${current.hostname}:8000`
+      : current.origin;
   const configured = (import.meta.env.VITE_BACKEND_API_URL as string | undefined)?.trim();
   if (!configured) return inferredBackendUrl;
   try {
@@ -70,7 +74,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
-  return (await response.json()) as T;
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as T;
+  }
+  const text = await response.text();
+  const snippet = text.slice(0, 140).trim();
+  throw new Error(
+    `Expected JSON from ${path}, got ${contentType || "unknown content-type"}.` +
+      (snippet ? ` Response starts with: ${snippet}` : "")
+  );
 }
 
 export const api = {
@@ -114,6 +127,15 @@ export const api = {
       });
       if (primary.ok) {
         previewUrlRouteSupported = true;
+        const contentType = (primary.headers.get("content-type") || "").toLowerCase();
+        if (!contentType.includes("application/json")) {
+          const text = await primary.text();
+          const snippet = text.slice(0, 140).trim();
+          throw new Error(
+            `Expected JSON from /api/preview/url/${streamId}, got ${contentType || "unknown content-type"}.` +
+              (snippet ? ` Response starts with: ${snippet}` : "")
+          );
+        }
         return (await primary.json()) as PreviewResolveResponse;
       }
       if (primary.status !== 404) {
@@ -140,6 +162,15 @@ export const api = {
     if (!fallback.ok) {
       const text = await fallback.text();
       throw new Error(text || `Request failed with ${fallback.status}`);
+    }
+    const contentType = (fallback.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("application/json")) {
+      const text = await fallback.text();
+      const snippet = text.slice(0, 140).trim();
+      throw new Error(
+        `Expected JSON from /api/preview/start, got ${contentType || "unknown content-type"}.` +
+          (snippet ? ` Response starts with: ${snippet}` : "")
+      );
     }
     return (await fallback.json()) as PreviewResolveResponse;
   },
