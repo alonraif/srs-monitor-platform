@@ -344,6 +344,7 @@ def get_system() -> SystemResponse:
         api_url=settings.srs_api_url,
         status=ServiceState.HEALTHY,
         version="6.0.0",
+        uptime_seconds=248640,
         connections=2778,
         publishers=4,
         subscribers=2774,

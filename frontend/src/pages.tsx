@@ -361,19 +361,6 @@ function formatUptimeDaysHHMM(totalSeconds: number): string {
   return `Days: ${days}, ${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
-
-function extractSrsUptimeSeconds(system: SystemResponse): number {
-  const srsDebug = asRecord(system.srs.debug);
-  const summaries = asRecord(srsDebug?.srs_summaries);
-  const data = asRecord(summaries?.data);
-  const systemData = asRecord(data?.system);
-  const uptime = systemData?.uptime;
-  return typeof uptime === "number" && Number.isFinite(uptime) ? Math.max(0, Math.floor(uptime)) : 0;
-}
-
 export function DashboardPage() {
   const liveLoader = useCallback(
     () => Promise.all([api.getDashboard(), api.getStreams(), api.getAlarms()]),
@@ -405,7 +392,7 @@ export function DashboardPage() {
       (sum, stream) => sum + ((stream.metrics.bitrate_kbps ?? 0) * stream.viewers_current),
       0
     ) / 1000;
-  const srsUptimeSeconds = extractSrsUptimeSeconds(system);
+  const srsUptimeSeconds = system.srs.uptime_seconds;
   const backendUptimeSeconds = system.host.uptime_seconds;
 
   const mostViewedStreams = [...streams.streams]
@@ -483,7 +470,7 @@ export function DashboardPage() {
           <article className="metric-card"><div className="metric-title">CPU Usage</div><div className="metric-value">{system.host.cpu_percent.toFixed(1)}%</div></article>
           <article className="metric-card"><div className="metric-title">Memory Usage</div><div className="metric-value">{system.host.memory.used.toFixed(1)}%</div></article>
           <article className="metric-card"><div className="metric-title">SRS Uptime</div><div className="metric-value">{formatUptimeDaysHHMM(srsUptimeSeconds)}</div></article>
-          <article className="metric-card"><div className="metric-title">Backend Uptime</div><div className="metric-value">{formatUptimeDaysHHMM(backendUptimeSeconds)}</div></article>
+          <article className="metric-card"><div className="metric-title">Host Uptime</div><div className="metric-value">{formatUptimeDaysHHMM(backendUptimeSeconds)}</div></article>
         </div>
       </div>
 

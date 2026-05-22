@@ -538,6 +538,7 @@ def normalize_srs_health(snapshot: SrsApiSnapshot) -> SrsHealth:
             api_url=snapshot.base_url,
             status=ServiceState.SRS_UNREACHABLE,
             version="unknown",
+            uptime_seconds=0,
             connections=0,
             publishers=0,
             subscribers=0,
@@ -555,10 +556,15 @@ def normalize_srs_health(snapshot: SrsApiSnapshot) -> SrsHealth:
     connection_count = _as_int(system_data.get("conn_srs")) or len(clients)
     status = ServiceState.DEGRADED if snapshot.errors else ServiceState.HEALTHY
 
+    srs_uptime_seconds = _as_int(self_data.get("srs_uptime"))
+    if srs_uptime_seconds is None:
+        srs_uptime_seconds = _as_int(system_data.get("uptime"))
+
     return SrsHealth(
         api_url=snapshot.base_url,
         status=status,
         version=_unknown(self_data.get("version")),
+        uptime_seconds=max(srs_uptime_seconds or 0, 0),
         connections=connection_count,
         publishers=publishers,
         subscribers=max(connection_count - publishers, len(clients)),

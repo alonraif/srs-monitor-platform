@@ -26,7 +26,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <section className="content">
         <header className="topbar">
-          <div className="topbar-title">Network Operations</div>
+          <img
+            className="topbar-logo"
+            src="https://cdn-liveutv.pressidium.com/wp-content/uploads/2024/01/Live-and-Ulimted-all-white-V2.png"
+            alt="Live and Unlimited"
+          />
           <div className="topbar-status">Auto-refresh: 5s</div>
         </header>
         <main className="page">{children}</main>

@@ -129,6 +129,7 @@ export interface SystemResponse {
     api_url: string;
     status: HealthState;
     version: string;
+    uptime_seconds: number;
     connections: number;
     publishers: number;
     subscribers: number;

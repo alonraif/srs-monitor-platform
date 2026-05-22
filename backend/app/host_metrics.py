@@ -77,6 +77,7 @@ class HostMetricsCollector:
                 api_url=settings.srs_api_url,
                 status=ServiceState.UNKNOWN,
                 version="unknown",
+                uptime_seconds=0,
                 connections=0,
                 publishers=0,
                 subscribers=0,
@@ -117,7 +118,8 @@ class HostMetricsCollector:
             disk = psutil.disk_usage("/")
             load = [float(value) for value in os.getloadavg()] if hasattr(os, "getloadavg") else []
             net = self._sample_network_rates()
-            uptime_seconds = int(time.time() - PROCESS_START_TS)
+            host_uptime_seconds = max(int(time.time() - psutil.boot_time()), 0)
+            backend_uptime_seconds = max(int(time.time() - PROCESS_START_TS), 0)
 
             mem_pct = float(vm.percent)
             disk_pct = float(disk.percent)
@@ -132,14 +134,15 @@ class HostMetricsCollector:
             return HostHealth(
                 hostname=socket.gethostname(),
                 status=status,
-                uptime_seconds=uptime_seconds,
+                uptime_seconds=host_uptime_seconds,
                 cpu_percent=float(cpu),
                 load_average=load,
                 memory=CapacityMetric(used=round(mem_pct, 2), total=100.0, unit="percent"),
                 disk=CapacityMetric(used=round(disk_pct, 2), total=100.0, unit="percent"),
                 network=net,
                 debug={
-                    "backend_uptime_seconds": uptime_seconds,
+                    "backend_uptime_seconds": backend_uptime_seconds,
+                    "host_uptime_seconds": host_uptime_seconds,
                     "collected_at": now.isoformat().replace("+00:00", "Z"),
                     "cpu_source": cpu_source,
                 },
@@ -148,7 +151,7 @@ class HostMetricsCollector:
             return HostHealth(
                 hostname=socket.gethostname(),
                 status=ServiceState.UNKNOWN,
-                uptime_seconds=int(time.time() - PROCESS_START_TS),
+                uptime_seconds=max(int(time.time() - psutil.boot_time()), 0),
                 cpu_percent=0.0,
                 load_average=[],
                 memory=CapacityMetric(used=0.0, total=100.0, unit="percent"),
@@ -250,6 +253,7 @@ class HostMetricsCollector:
                 api_url=settings.srs_api_url,
                 status=status,
                 version="unknown",
+                uptime_seconds=0,
                 connections=0,
                 publishers=0,
                 subscribers=0,
@@ -273,11 +277,15 @@ class HostMetricsCollector:
         if recv_kbps == 0 and send_kbps == 0 and streams:
             recv_kbps = sum(stream.metrics.bitrate_kbps or 0 for stream in streams)
             send_kbps = sum((stream.metrics.bitrate_kbps or 0) * stream.viewers_current for stream in streams)
+        srs_uptime_seconds = self._as_int(self_data.get("srs_uptime"))
+        if srs_uptime_seconds is None:
+            srs_uptime_seconds = self._as_int(system_data.get("uptime"))
 
         return SrsHealth(
             api_url=settings.srs_api_url,
             status=status,
             version=str(self_data.get("version", "unknown")),
+            uptime_seconds=max(srs_uptime_seconds or 0, 0),
             connections=connections,
             publishers=sum(1 for stream in streams if str(stream.status).lower() == "online"),
             subscribers=max(connections, 0),

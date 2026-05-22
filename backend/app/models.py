@@ -173,6 +173,7 @@ class SrsHealth(BaseModel):
     api_url: str
     status: ServiceState
     version: str
+    uptime_seconds: int = Field(ge=0)
     connections: int = Field(ge=0)
     publishers: int = Field(ge=0)
     subscribers: int = Field(ge=0)
