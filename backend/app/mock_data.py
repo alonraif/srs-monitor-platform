@@ -343,7 +343,7 @@ def get_system() -> SystemResponse:
     srs = SrsHealth(
         api_url=settings.srs_api_url,
         status=ServiceState.HEALTHY,
-        version="5.0.213",
+        version="6.0.0",
         connections=2778,
         publishers=4,
         subscribers=2774,

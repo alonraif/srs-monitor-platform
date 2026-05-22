@@ -1,6 +1,6 @@
 services:
   srs:
-    image: ossrs/srs:5
+    image: ossrs/srs:6
     container_name: srs
     restart: unless-stopped
     command: ./objs/srs -c /usr/local/srs/conf/srs.conf

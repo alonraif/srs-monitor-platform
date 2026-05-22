@@ -23,9 +23,10 @@ class SrsApiClient:
     # commonly redirect to trailing-slash URLs, so the HTTP client follows redirects.
     ENDPOINTS = {
         "summaries": "/api/v1/summaries",
-        "vhosts": "/api/v1/vhosts/",
-        "streams": "/api/v1/streams/",
-        "clients": "/api/v1/clients/",
+        # Explicitly request larger pages to avoid default server-side limits.
+        "vhosts": "/api/v1/vhosts/?start=0&count=1000",
+        "streams": "/api/v1/streams/?start=0&count=1000",
+        "clients": "/api/v1/clients/?start=0&count=1000",
     }
 
     def __init__(self, base_url: str | None = None, timeout_seconds: float | None = None) -> None:
