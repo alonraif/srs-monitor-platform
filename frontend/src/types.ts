@@ -134,6 +134,7 @@ export interface SystemResponse {
     subscribers: number;
     recv_kbps: number;
     send_kbps: number;
+    debug?: Record<string, unknown>;
   };
   services: Array<{
     name: string;
