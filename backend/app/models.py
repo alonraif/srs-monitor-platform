@@ -53,6 +53,7 @@ class StreamMetrics(BaseModel):
     resolution: str
     video_codec: str
     audio_codec: str
+    audio_channels: int | None = Field(default=None, ge=1, le=32)
     latency_ms: int | None = Field(default=None, ge=0)
     packet_loss_percent: float | None = Field(default=None, ge=0)
     jitter_ms: int | None = Field(default=None, ge=0)

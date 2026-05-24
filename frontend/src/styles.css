@@ -831,6 +831,69 @@ textarea {
   inset: 0;
 }
 
+.audio-meter {
+  position: absolute;
+  top: var(--audio-meter-top, 6px);
+  left: 6px;
+  bottom: var(--audio-meter-bottom, 6px);
+  z-index: 3;
+  width: clamp(16px, 3.8cqi, 42px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(41, 71, 99, 0.3);
+  border-radius: 6px;
+  background: rgba(5, 12, 20, 0.3);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+}
+
+.audio-meter-head {
+  font-size: clamp(0.42rem, 0.9cqi, 0.62rem);
+  color: rgba(210, 231, 250, 0.72);
+  text-align: center;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.audio-meter-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(2px, 1fr));
+  gap: 2px;
+  align-items: end;
+}
+
+.audio-meter-bar {
+  position: relative;
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(12, 24, 37, 0.32);
+  border: 1px solid rgba(50, 81, 111, 0.35);
+  overflow: hidden;
+}
+
+.audio-meter-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  transition: height 75ms linear;
+}
+
+.audio-meter-bar.green .audio-meter-fill {
+  background: linear-gradient(180deg, #3ad37f 0%, #16724b 100%);
+}
+
+.audio-meter-bar.yellow .audio-meter-fill {
+  background: linear-gradient(180deg, #ffe27c 0%, #a27714 100%);
+}
+
+.audio-meter-bar.red .audio-meter-fill {
+  background: linear-gradient(180deg, #ff8585 0%, #922e2e 100%);
+}
+
 .mv-state {
   position: absolute;
   top: 6px;

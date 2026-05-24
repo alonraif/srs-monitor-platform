@@ -41,6 +41,7 @@ export interface Stream {
     resolution: string;
     video_codec: string;
     audio_codec?: string;
+    audio_channels?: number | null;
   };
 }
 

@@ -303,6 +303,9 @@ def _normalize_stream(
     kbps = _as_dict(raw.get("kbps"))
     video = _as_dict(raw.get("video"))
     audio = _as_dict(raw.get("audio"))
+    audio_channels = _as_int(audio.get("channels") or raw.get("achannels"))
+    if audio_channels is not None and audio_channels <= 0:
+        audio_channels = None
     width = _as_int(video.get("width"))
     height = _as_int(video.get("height"))
     resolution = f"{width}x{height}" if width and height else "unknown"
@@ -354,6 +357,7 @@ def _normalize_stream(
             resolution=resolution,
             video_codec=_unknown(video.get("codec") or raw.get("vcodec")),
             audio_codec=_unknown(audio.get("codec") or raw.get("acodec")),
+            audio_channels=audio_channels,
             latency_ms=None,
             packet_loss_percent=None,
             jitter_ms=None,

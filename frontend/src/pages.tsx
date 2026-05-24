@@ -218,6 +218,43 @@ function formatFps(value: number | null | undefined): string {
   return value.toFixed(1);
 }
 
+const AUDIO_METER_MIN_DB = -60;
+const AUDIO_METER_MAX_DB = 0;
+const AUDIO_METER_FALLBACK_CHANNELS = 2;
+const AUDIO_METER_MAX_CHANNELS = 16;
+const AUDIO_METER_GREEN_DB = -18;
+const AUDIO_METER_YELLOW_DB = -9;
+let sharedAudioContext: AudioContext | null = null;
+const AUDIO_METER_VISUAL_IN_MIN_DB = -42;
+const AUDIO_METER_VISUAL_IN_MAX_DB = -6;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function meterBarClass(db: number): "green" | "yellow" | "red" {
+  if (db >= AUDIO_METER_YELLOW_DB) return "red";
+  if (db >= AUDIO_METER_GREEN_DB) return "yellow";
+  return "green";
+}
+
+function calibrateMeterVisualDb(rawDb: number): number {
+  const inSpan = AUDIO_METER_VISUAL_IN_MAX_DB - AUDIO_METER_VISUAL_IN_MIN_DB;
+  if (inSpan <= 0) return clamp(rawDb, AUDIO_METER_MIN_DB, AUDIO_METER_MAX_DB);
+  const norm = (rawDb - AUDIO_METER_VISUAL_IN_MIN_DB) / inSpan;
+  const outDb = AUDIO_METER_MIN_DB + clamp(norm, 0, 1) * (AUDIO_METER_MAX_DB - AUDIO_METER_MIN_DB);
+  return clamp(outDb, AUDIO_METER_MIN_DB, AUDIO_METER_MAX_DB);
+}
+
+function getSharedAudioContext(): AudioContext | null {
+  const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    sharedAudioContext = new AudioCtx();
+  }
+  return sharedAudioContext;
+}
+
 function playbackSourceLabel(source: PreviewResolveResponse["source"] | null | undefined): string {
   if (source === "native_webrtc") return "WebRTC";
   if (source === "native_hls" || source === "preview_hls") return "HLS";
@@ -1757,6 +1794,7 @@ function TilePlayer({
   muted,
   scanType,
   protocol,
+  audioChannelsHint,
   targetAspectRatio,
   children
 }: {
@@ -1764,17 +1802,28 @@ function TilePlayer({
   muted: boolean;
   scanType: "progressive" | "interlaced" | "unknown";
   protocol: string | null | undefined;
+  audioChannelsHint?: number | null;
   targetAspectRatio?: number;
   children?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
+  const mediaBoxRef = useRef<HTMLDivElement | null>(null);
   const [boxSize, setBoxSize] = useState<{ width: number; height: number } | null>(null);
   // Only deinterlace when we are sure the feed is interlaced.
   // Treating "unknown" as interlaced is expensive in multiview and can cause stalls.
   const shouldDeinterlace = scanType === "interlaced";
   const aggressiveSrtDeinterlace = scanType === "interlaced" && String(protocol || "").toUpperCase() === "SRT";
+  const [meterChannelCount, setMeterChannelCount] = useState<number>(AUDIO_METER_FALLBACK_CHANNELS);
+  const meterBarRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const meterFillRefs = useRef<Array<HTMLDivElement | null>>([]);
+
+  const meterRuntimeChannels = useMemo(() => {
+    if (!Number.isFinite(audioChannelsHint as number)) return null;
+    const next = Math.floor(audioChannelsHint as number);
+    return next > 0 ? clamp(next, 1, AUDIO_METER_MAX_CHANNELS) : null;
+  }, [audioChannelsHint]);
 
   useEffect(() => {
     const el = frameRef.current;
@@ -1826,13 +1875,235 @@ function TilePlayer({
   }, [targetAspectRatio]);
 
   useEffect(() => {
+    const box = mediaBoxRef.current;
+    if (!box) return;
+    let overlayEl: HTMLElement | null = null;
+    let stateEl: HTMLElement | null = null;
+    let overlayRo: ResizeObserver | null = null;
+    let stateRo: ResizeObserver | null = null;
+
+    const updateMeterOffsets = () => {
+      const overlayHeight = overlayEl?.offsetHeight ?? 0;
+      const safeBottom = Math.max(6, overlayHeight + 10);
+      const stateHeight = stateEl?.offsetHeight ?? 0;
+      const safeTop = Math.max(6, stateHeight + 12);
+      box.style.setProperty("--audio-meter-top", `${safeTop}px`);
+      box.style.setProperty("--audio-meter-bottom", `${safeBottom}px`);
+    };
+
+    const bindOverlayAndState = () => {
+      const nextOverlay = box.querySelector(".mv-overlay") as HTMLElement | null;
+      const nextState = box.querySelector(".mv-state") as HTMLElement | null;
+      if (nextOverlay === overlayEl) {
+        if (nextState === stateEl) {
+          updateMeterOffsets();
+          return;
+        }
+      }
+      overlayRo?.disconnect();
+      overlayRo = null;
+      stateRo?.disconnect();
+      stateRo = null;
+      overlayEl = nextOverlay;
+      stateEl = nextState;
+      if (overlayEl && typeof ResizeObserver !== "undefined") {
+        overlayRo = new ResizeObserver(updateMeterOffsets);
+        overlayRo.observe(overlayEl);
+      }
+      if (stateEl && typeof ResizeObserver !== "undefined") {
+        stateRo = new ResizeObserver(updateMeterOffsets);
+        stateRo.observe(stateEl);
+      }
+      updateMeterOffsets();
+    };
+
+    bindOverlayAndState();
+    const mo = new MutationObserver(() => bindOverlayAndState());
+    mo.observe(box, { childList: true, subtree: true });
+    window.addEventListener("resize", updateMeterOffsets);
+
+    return () => {
+      mo.disconnect();
+      overlayRo?.disconnect();
+      stateRo?.disconnect();
+      window.removeEventListener("resize", updateMeterOffsets);
+    };
+  }, []);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !playbackUrl) return;
+    const defaultChannels = meterRuntimeChannels ?? AUDIO_METER_FALLBACK_CHANNELS;
+    setMeterChannelCount(defaultChannels);
+
     let hls: { destroy: () => void } | null = null;
     let flv: { destroy: () => void; unload: () => void; detachMediaElement: () => void } | null = null;
     let pc: RTCPeerConnection | null = null;
     let onStall: (() => void) | null = null;
     let active = true;
+    let rafMeter = 0;
+    let audioCtx: AudioContext | null = null;
+    let meterSplit: ChannelSplitterNode | null = null;
+    let meterProcessor: ScriptProcessorNode | null = null;
+    let meterSource: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
+    let meterGain: GainNode | null = null;
+    let meterCaptureStream: MediaStream | null = null;
+    let meterResumeHandlers: Array<[keyof WindowEventMap, EventListener]> = [];
+
+    const stopMeter = () => {
+      if (rafMeter) window.cancelAnimationFrame(rafMeter);
+      rafMeter = 0;
+      try {
+        meterSource?.disconnect();
+      } catch {
+        // ignore disconnect errors during source swap
+      }
+      try {
+        meterSplit?.disconnect();
+      } catch {
+        // ignore disconnect errors during source swap
+      }
+      try {
+        meterProcessor?.disconnect();
+      } catch {
+        // ignore disconnect errors during source swap
+      }
+      try {
+        meterGain?.disconnect();
+      } catch {
+        // ignore disconnect errors during source swap
+      }
+      meterProcessor = null;
+      meterSplit = null;
+      meterSource = null;
+      meterGain = null;
+      meterCaptureStream = null;
+      for (const [evt, handler] of meterResumeHandlers) {
+        window.removeEventListener(evt, handler);
+      }
+      meterResumeHandlers = [];
+    };
+
+    const startMeter = (channelCount: number) => {
+      if (!audioCtx || !meterSplit || !meterProcessor) return;
+      setMeterChannelCount(channelCount);
+      const instant = Array.from({ length: channelCount }, () => AUDIO_METER_MIN_DB);
+      const tick = () => {
+        if (!active || !audioCtx) return;
+        for (let i = 0; i < channelCount; i += 1) {
+          const rawDb = instant[i] ?? AUDIO_METER_MIN_DB;
+          const db = calibrateMeterVisualDb(rawDb);
+          const pct = ((clamp(db, AUDIO_METER_MIN_DB, AUDIO_METER_MAX_DB) - AUDIO_METER_MIN_DB) / (AUDIO_METER_MAX_DB - AUDIO_METER_MIN_DB)) * 100;
+          const fillEl = meterFillRefs.current[i];
+          if (fillEl) fillEl.style.height = `${clamp(pct, 0, 100)}%`;
+          const barEl = meterBarRefs.current[i];
+          if (barEl) {
+            barEl.classList.remove("green", "yellow", "red");
+            barEl.classList.add(meterBarClass(db));
+          }
+        }
+        rafMeter = window.requestAnimationFrame(tick);
+      };
+
+      meterProcessor.onaudioprocess = (evt) => {
+        const input = evt.inputBuffer;
+        const nCh = Math.min(channelCount, input.numberOfChannels);
+        for (let ch = 0; ch < nCh; ch += 1) {
+          const data = input.getChannelData(ch);
+          let mean = 0;
+          for (let i = 0; i < data.length; i += 1) mean += data[i];
+          mean /= data.length;
+          let sumSquares = 0;
+          let peak = 0;
+          for (let i = 0; i < data.length; i += 1) {
+            const centered = data[i] - mean;
+            sumSquares += centered * centered;
+            const abs = Math.abs(centered);
+            if (abs > peak) peak = abs;
+          }
+          const rms = Math.sqrt(sumSquares / data.length);
+          const rmsDb = clamp(20 * Math.log10(Math.max(rms, 1e-7)), AUDIO_METER_MIN_DB, AUDIO_METER_MAX_DB);
+          const peakDb = clamp(20 * Math.log10(Math.max(peak, 1e-7)), AUDIO_METER_MIN_DB, AUDIO_METER_MAX_DB);
+          // Blend fast peak and RMS so movement is visible while remaining stable.
+          instant[ch] = (peakDb * 0.65) + (rmsDb * 0.35);
+        }
+      };
+      rafMeter = window.requestAnimationFrame(tick);
+    };
+
+    const ensureContextRunning = (ctx: AudioContext) => {
+      if (ctx.state === "running") return;
+      const resume = () => {
+        void ctx.resume().finally(() => {
+          if (ctx.state === "running") {
+            for (const [evt, handler] of meterResumeHandlers) window.removeEventListener(evt, handler);
+            meterResumeHandlers = [];
+          }
+        });
+      };
+      resume();
+      for (const evt of ["pointerdown", "touchstart", "keydown"] as const) {
+        const handler = () => resume();
+        meterResumeHandlers.push([evt, handler]);
+        window.addEventListener(evt, handler, { passive: true });
+      }
+    };
+
+    const initMeter = (sourceStream?: MediaStream) => {
+      if (!video || !active) return;
+      stopMeter();
+      audioCtx = getSharedAudioContext();
+      if (!audioCtx) return;
+      const ctx = audioCtx;
+      ensureContextRunning(ctx);
+      const channels = meterRuntimeChannels ?? AUDIO_METER_FALLBACK_CHANNELS;
+      const candidate = sourceStream || meterCaptureStream;
+      if (candidate) {
+        const audioTracks = candidate.getAudioTracks();
+        const track = audioTracks[0];
+        if (!track) return;
+        meterSource = ctx.createMediaStreamSource(candidate);
+      } else {
+        try {
+          meterSource = ctx.createMediaElementSource(video);
+        } catch {
+          meterSource = null;
+        }
+      }
+      if (!meterSource) return;
+      const splitter = ctx.createChannelSplitter(channels);
+      meterSplit = splitter;
+      meterGain = ctx.createGain();
+      meterGain.gain.value = 0;
+      meterProcessor = ctx.createScriptProcessor(512, channels, 1);
+      meterSource.connect(splitter);
+      meterSource.connect(meterGain);
+      splitter.connect(meterProcessor);
+      meterProcessor.connect(meterGain);
+      meterGain.connect(ctx.destination);
+      startMeter(channels);
+    };
+
+    const initMeterFromElement = () => {
+      if (!active) return;
+      if (video.srcObject instanceof MediaStream) {
+        initMeter(video.srcObject);
+        return;
+      }
+      if (typeof video.captureStream === "function") {
+        try {
+          meterCaptureStream = video.captureStream();
+          if (meterCaptureStream.getAudioTracks().length > 0) {
+            initMeter(meterCaptureStream);
+            return;
+          }
+        } catch {
+          meterCaptureStream = null;
+        }
+      }
+      initMeter();
+    };
+
     video.muted = muted;
     video.playsInline = true;
     video.autoplay = true;
@@ -1852,6 +2123,7 @@ function TilePlayer({
             const [stream] = event.streams;
             if (!stream || !active) return;
             video.srcObject = stream;
+            initMeter(stream);
             void video.play().catch(() => undefined);
           };
           const offer = await connection.createOffer();
@@ -1899,6 +2171,7 @@ function TilePlayer({
             player.attachMediaElement(video);
             player.load();
             void Promise.resolve(player.play()).catch(() => undefined);
+            video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
             flv = player;
           } else if (Hls.isSupported()) {
             const instance = new Hls({
@@ -1939,11 +2212,13 @@ function TilePlayer({
             };
             video.addEventListener("stalled", onStall);
             video.addEventListener("waiting", onStall);
+            video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
             instance.loadSource(playbackUrl);
             instance.attachMedia(video);
             hls = instance;
           } else {
             video.src = playbackUrl;
+            video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
             await video.play().catch(() => undefined);
           }
         } else if (playbackUrl.includes(".flv")) {
@@ -1952,13 +2227,16 @@ function TilePlayer({
             player.attachMediaElement(video);
             player.load();
             void Promise.resolve(player.play()).catch(() => undefined);
+            video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
             flv = player;
           } else {
             video.src = playbackUrl;
+            video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
             await video.play().catch(() => undefined);
           }
         } else {
           video.src = playbackUrl;
+          video.addEventListener("loadedmetadata", initMeterFromElement, { once: true });
           await video.play().catch(() => undefined);
         }
       } catch {
@@ -1983,11 +2261,13 @@ function TilePlayer({
         video.removeEventListener("stalled", onStall);
         video.removeEventListener("waiting", onStall);
       }
+      video.removeEventListener("loadedmetadata", initMeterFromElement);
+      stopMeter();
       video.srcObject = null;
       video.removeAttribute("src");
       video.load();
     };
-  }, [playbackUrl]);
+  }, [playbackUrl, meterRuntimeChannels]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
@@ -2066,6 +2346,7 @@ function TilePlayer({
   return (
     <div ref={frameRef} className="mv-media-frame">
       <div
+        ref={mediaBoxRef}
         className="mv-media-box"
         style={
           boxSize
@@ -2075,6 +2356,28 @@ function TilePlayer({
       >
         <video ref={videoRef} className={`mv-video ${shouldDeinterlace ? "is-hidden" : ""}`} muted={muted} />
         {shouldDeinterlace ? <canvas ref={canvasRef} className="mv-video mv-canvas" /> : null}
+        <div className="audio-meter" aria-label={`Audio meter ${meterChannelCount} channels`}>
+          <div className="audio-meter-head">{meterChannelCount}ch</div>
+          <div className="audio-meter-bars">
+            {Array.from({ length: meterChannelCount }, (_, idx) => (
+              <div
+                key={`ch-${idx}`}
+                className="audio-meter-bar green"
+                ref={(el) => {
+                  meterBarRefs.current[idx] = el;
+                }}
+              >
+                <div
+                  className="audio-meter-fill"
+                  ref={(el) => {
+                    meterFillRefs.current[idx] = el;
+                  }}
+                  style={{ height: "0%" }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
         {children}
       </div>
     </div>
@@ -2661,6 +2964,7 @@ export function MultiviewerPage() {
                     muted={tile.muted}
                     scanType={stream?.metrics.scan_type ?? "unknown"}
                     protocol={stream?.protocol}
+                    audioChannelsHint={stream?.metrics.audio_channels ?? null}
                   >
                     <div className="mv-state">{state}{preview?.reason ? `: ${preview.reason}` : ""}</div>
 	                    <div className="mv-overlay">
@@ -3140,6 +3444,7 @@ export function PenaltyBoxPage() {
                     muted
                     scanType={item.stream.metrics.scan_type ?? "unknown"}
                     protocol={item.stream.protocol}
+                    audioChannelsHint={item.stream.metrics.audio_channels ?? null}
                   >
                     <div className="mv-state">{state}</div>
                     <div className="mv-overlay">
