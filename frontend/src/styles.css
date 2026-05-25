@@ -837,7 +837,7 @@ textarea {
   left: 6px;
   bottom: var(--audio-meter-bottom, 6px);
   z-index: 3;
-  width: clamp(16px, 3.8cqi, 42px);
+  width: clamp(24px, 4.8cqi, 52px);
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 3px;
@@ -857,10 +857,18 @@ textarea {
   font-weight: 700;
 }
 
+.audio-meter-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px;
+  min-height: 0;
+}
+
 .audio-meter-bars {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(2px, 1fr));
-  gap: 2px;
+  gap: 1px;
   align-items: end;
 }
 
@@ -869,7 +877,6 @@ textarea {
   height: 100%;
   border-radius: 2px;
   background: rgba(12, 24, 37, 0.32);
-  border: 1px solid rgba(50, 81, 111, 0.35);
   overflow: hidden;
 }
 
@@ -892,6 +899,43 @@ textarea {
 
 .audio-meter-bar.red .audio-meter-fill {
   background: linear-gradient(180deg, #ff8585 0%, #922e2e 100%);
+}
+
+.audio-meter-scale {
+  position: relative;
+  width: clamp(9px, 1.6cqi, 14px);
+}
+
+.audio-meter-scale-unit {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  font-size: clamp(0.42rem, 0.85cqi, 0.56rem);
+  color: rgba(189, 211, 232, 0.72);
+  line-height: 1;
+}
+
+.audio-meter-scale-tick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: clamp(0.4rem, 0.8cqi, 0.54rem);
+  color: rgba(189, 211, 232, 0.72);
+  line-height: 1;
+}
+
+@container (max-width: 220px) {
+  .audio-meter-body {
+    grid-template-columns: 1fr;
+  }
+
+  .audio-meter-scale {
+    display: none;
+  }
+
+  .audio-meter-scale-tick {
+    display: none;
+  }
 }
 
 .mv-state {

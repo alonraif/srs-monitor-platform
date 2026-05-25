@@ -224,6 +224,7 @@ const AUDIO_METER_FALLBACK_CHANNELS = 2;
 const AUDIO_METER_MAX_CHANNELS = 16;
 const AUDIO_METER_GREEN_DB = -18;
 const AUDIO_METER_YELLOW_DB = -9;
+const AUDIO_METER_DB_TICKS = [0, -9, -18, -30, -45, -60] as const;
 let sharedAudioContext: AudioContext | null = null;
 const AUDIO_METER_VISUAL_IN_MIN_DB = -42;
 const AUDIO_METER_VISUAL_IN_MAX_DB = -6;
@@ -1884,9 +1885,18 @@ function TilePlayer({
 
     const updateMeterOffsets = () => {
       const overlayHeight = overlayEl?.offsetHeight ?? 0;
-      const safeBottom = Math.max(6, overlayHeight + 10);
       const stateHeight = stateEl?.offsetHeight ?? 0;
-      const safeTop = Math.max(6, stateHeight + 12);
+      let safeBottom = Math.max(6, overlayHeight + 10);
+      let safeTop = Math.max(6, stateHeight + 12);
+      const minMeterHeight = 34;
+      const boxHeight = box.clientHeight || 0;
+      const maxOffsets = Math.max(12, boxHeight - minMeterHeight);
+      const totalOffsets = safeTop + safeBottom;
+      if (totalOffsets > maxOffsets) {
+        const ratio = maxOffsets / totalOffsets;
+        safeTop = Math.max(6, Math.floor(safeTop * ratio));
+        safeBottom = Math.max(6, Math.floor(safeBottom * ratio));
+      }
       box.style.setProperty("--audio-meter-top", `${safeTop}px`);
       box.style.setProperty("--audio-meter-bottom", `${safeBottom}px`);
     };
@@ -2358,24 +2368,38 @@ function TilePlayer({
         {shouldDeinterlace ? <canvas ref={canvasRef} className="mv-video mv-canvas" /> : null}
         <div className="audio-meter" aria-label={`Audio meter ${meterChannelCount} channels`}>
           <div className="audio-meter-head">{meterChannelCount}ch</div>
-          <div className="audio-meter-bars">
-            {Array.from({ length: meterChannelCount }, (_, idx) => (
-              <div
-                key={`ch-${idx}`}
-                className="audio-meter-bar green"
-                ref={(el) => {
-                  meterBarRefs.current[idx] = el;
-                }}
-              >
+          <div className="audio-meter-body">
+            <div className="audio-meter-bars">
+              {Array.from({ length: meterChannelCount }, (_, idx) => (
                 <div
-                  className="audio-meter-fill"
+                  key={`ch-${idx}`}
+                  className="audio-meter-bar green"
                   ref={(el) => {
-                    meterFillRefs.current[idx] = el;
+                    meterBarRefs.current[idx] = el;
                   }}
-                  style={{ height: "0%" }}
-                />
-              </div>
-            ))}
+                >
+                  <div
+                    className="audio-meter-fill"
+                    ref={(el) => {
+                      meterFillRefs.current[idx] = el;
+                    }}
+                    style={{ height: "0%" }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="audio-meter-scale" aria-hidden="true">
+              <div className="audio-meter-scale-unit">dB</div>
+              {AUDIO_METER_DB_TICKS.map((tick) => (
+                <div
+                  key={`tick-${tick}`}
+                  className="audio-meter-scale-tick"
+                  style={{ top: `${((AUDIO_METER_MAX_DB - tick) / (AUDIO_METER_MAX_DB - AUDIO_METER_MIN_DB)) * 100}%` }}
+                >
+                  {tick}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         {children}
