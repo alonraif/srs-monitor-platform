@@ -44,9 +44,22 @@ function resolveBackendUrl(): string {
 const BASE_URL = resolveBackendUrl();
 export const LIVE_URL = `${BASE_URL}/api/live`;
 let previewUrlRouteSupported: boolean | null = null;
+const SESSION_STORAGE_KEY = "srs_monitor_session_token";
 const BACKEND_READ_API_KEY = (import.meta.env.VITE_BACKEND_API_KEY as string | undefined)?.trim() || "";
 const BACKEND_WRITE_API_KEY =
   (import.meta.env.VITE_BACKEND_WRITE_API_KEY as string | undefined)?.trim() || BACKEND_READ_API_KEY;
+
+export function getSessionToken(): string {
+  return window.localStorage.getItem(SESSION_STORAGE_KEY) || "";
+}
+
+export function setSessionToken(token: string | null): void {
+  if (!token) {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(SESSION_STORAGE_KEY, token);
+}
 
 function authHeaders(method = "GET"): Record<string, string> {
   const upper = method.toUpperCase();
@@ -60,6 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method || "GET").toUpperCase();
   const mergedHeaders = {
     "Content-Type": "application/json",
+    "x-session-token": getSessionToken(),
     ...authHeaders(method),
     ...((init?.headers as Record<string, string> | undefined) || {}),
   };
@@ -87,6 +101,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (password: string) =>
+    request<{ token: string }>("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) }),
+  logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  getSession: () => request<{ authenticated: boolean }>("/api/auth/session"),
   getDashboard: () => request<DashboardResponse>("/api/dashboard"),
   getSystem: () => request<SystemResponse>("/api/system"),
   getStreams: () => request<StreamsResponse>("/api/streams"),

@@ -4,6 +4,7 @@ import flvjs from "flv.js";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { api } from "./api";
+import { useAuth } from "./auth";
 import { EmptyState, ErrorState, LoadingState } from "./components";
 import { useAlarmFeed, useAutoRefresh, useLiveBundle } from "./hooks";
 import type {
@@ -3556,6 +3557,7 @@ export function PenaltyBoxPage() {
 }
 
 export function SettingsPage() {
+  const { idleLogoutMinutes, setIdleLogoutMinutes } = useAuth();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const host = publicHost();
   const appName = "live";
@@ -3566,6 +3568,8 @@ export function SettingsPage() {
   const srtPort = frontendEnv("VITE_SRS_SRT_PORT", "10080");
   const httpBase = resolveSrsHttpBaseUrl(host);
   const webrtcBase = frontendEnv("VITE_SRS_PUBLIC_WEBRTC_BASE_URL", `webrtc://${host}`).replace(/\/$/, "");
+  const rtspSourceTemplate = "rtsp://user:password@camera-ip:554/stream1";
+  const rtspOutputTemplate = `rtmp://127.0.0.1/${appName}/camera-main`;
   const ingestFormats = [
     {
       key: "rtmp",
@@ -3585,6 +3589,17 @@ export function SettingsPage() {
       details: [
         { label: "Listener", value: `srt://${host}:${srtPort}` },
         { label: "Stream ID", value: `#!::r=${appStream},m=publish` }
+      ]
+    },
+    {
+      key: "rtsp-ingest",
+      format: "RTSP (Ingest)",
+      primaryLabel: "RTSP source URL (set via SRS_RTSP_{N}_SOURCE_URL)",
+      primaryUrl: rtspSourceTemplate,
+      details: [
+        { label: "SRS pull mode", value: "FFmpeg ingest in SRS config" },
+        { label: "Republish target", value: rtspOutputTemplate },
+        { label: "Multi-source env", value: "Use SRS_RTSP_1..4_* vars in .env" }
       ]
     }
   ];
@@ -3618,6 +3633,20 @@ export function SettingsPage() {
       </div>
 
       <h3 className="subhead">Ingest URLs</h3>
+      <div className="settings-auth-row">
+        <label htmlFor="idle-timeout">Auto-logout after idle</label>
+        <select
+          id="idle-timeout"
+          value={String(idleLogoutMinutes)}
+          onChange={(event) => setIdleLogoutMinutes(Number(event.target.value))}
+        >
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">60 minutes</option>
+          <option value="0">Never</option>
+        </select>
+      </div>
       <div className="settings-table-wrap">
         <table className="table settings-url-table">
           <thead>

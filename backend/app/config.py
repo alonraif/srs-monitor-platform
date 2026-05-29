@@ -65,6 +65,7 @@ class Settings(BaseModel):
     backend_api_auth_enabled: bool = _env_bool("BACKEND_API_AUTH_ENABLED", False)
     backend_read_api_key: str = getenv("BACKEND_READ_API_KEY", "")
     backend_write_api_key: str = getenv("BACKEND_WRITE_API_KEY", "")
+    ui_login_password: str = getenv("UI_LOGIN_PASSWORD", "")
     srs_api_username: str = getenv("SRS_API_USERNAME", "")
     srs_api_password: str = getenv("SRS_API_PASSWORD", "")
     srs_hook_shared_secret: str = getenv("SRS_HOOK_SHARED_SECRET", "")

@@ -13,6 +13,18 @@ services:
       -e \"s|__SRS_SRT_PBKEYLEN__|$${SRS_SRT_PBKEYLEN}|g\"
       -e \"s|__SRS_HOOK_ON_PUBLISH_URL__|$${SRS_HOOK_ON_PUBLISH_URL}|g\"
       -e \"s|__SRS_HOOK_ON_PLAY_URL__|$${SRS_HOOK_ON_PLAY_URL}|g\"
+      -e \"s|__SRS_RTSP_1_ENABLED__|$${SRS_RTSP_1_ENABLED}|g\"
+      -e \"s|__SRS_RTSP_1_SOURCE_URL__|$${SRS_RTSP_1_SOURCE_URL}|g\"
+      -e \"s|__SRS_RTSP_1_OUTPUT_RTMP_URL__|$${SRS_RTSP_1_OUTPUT_RTMP_URL}|g\"
+      -e \"s|__SRS_RTSP_2_ENABLED__|$${SRS_RTSP_2_ENABLED}|g\"
+      -e \"s|__SRS_RTSP_2_SOURCE_URL__|$${SRS_RTSP_2_SOURCE_URL}|g\"
+      -e \"s|__SRS_RTSP_2_OUTPUT_RTMP_URL__|$${SRS_RTSP_2_OUTPUT_RTMP_URL}|g\"
+      -e \"s|__SRS_RTSP_3_ENABLED__|$${SRS_RTSP_3_ENABLED}|g\"
+      -e \"s|__SRS_RTSP_3_SOURCE_URL__|$${SRS_RTSP_3_SOURCE_URL}|g\"
+      -e \"s|__SRS_RTSP_3_OUTPUT_RTMP_URL__|$${SRS_RTSP_3_OUTPUT_RTMP_URL}|g\"
+      -e \"s|__SRS_RTSP_4_ENABLED__|$${SRS_RTSP_4_ENABLED}|g\"
+      -e \"s|__SRS_RTSP_4_SOURCE_URL__|$${SRS_RTSP_4_SOURCE_URL}|g\"
+      -e \"s|__SRS_RTSP_4_OUTPUT_RTMP_URL__|$${SRS_RTSP_4_OUTPUT_RTMP_URL}|g\"
       /usr/local/srs/conf/srs.secure.conf.template > /tmp/srs.secure.conf
       && ./objs/srs -c /tmp/srs.secure.conf"
     environment:
@@ -22,6 +34,18 @@ services:
       SRS_SRT_PBKEYLEN: "${SRS_SRT_PBKEYLEN:-16}"
       SRS_HOOK_ON_PUBLISH_URL: "${SRS_HOOK_ON_PUBLISH_URL:-http://monitor-backend:8000/internal/srs/on_publish?secret=dev-hook-secret}"
       SRS_HOOK_ON_PLAY_URL: "${SRS_HOOK_ON_PLAY_URL:-http://monitor-backend:8000/internal/srs/on_play?secret=dev-hook-secret}"
+      SRS_RTSP_1_ENABLED: "${SRS_RTSP_1_ENABLED:-off}"
+      SRS_RTSP_1_SOURCE_URL: "${SRS_RTSP_1_SOURCE_URL:-rtsp://user:password@camera-ip:554/stream1}"
+      SRS_RTSP_1_OUTPUT_RTMP_URL: "${SRS_RTSP_1_OUTPUT_RTMP_URL:-rtmp://127.0.0.1/live/camera-1}"
+      SRS_RTSP_2_ENABLED: "${SRS_RTSP_2_ENABLED:-off}"
+      SRS_RTSP_2_SOURCE_URL: "${SRS_RTSP_2_SOURCE_URL:-rtsp://user:password@camera-ip:554/stream2}"
+      SRS_RTSP_2_OUTPUT_RTMP_URL: "${SRS_RTSP_2_OUTPUT_RTMP_URL:-rtmp://127.0.0.1/live/camera-2}"
+      SRS_RTSP_3_ENABLED: "${SRS_RTSP_3_ENABLED:-off}"
+      SRS_RTSP_3_SOURCE_URL: "${SRS_RTSP_3_SOURCE_URL:-rtsp://user:password@camera-ip:554/stream3}"
+      SRS_RTSP_3_OUTPUT_RTMP_URL: "${SRS_RTSP_3_OUTPUT_RTMP_URL:-rtmp://127.0.0.1/live/camera-3}"
+      SRS_RTSP_4_ENABLED: "${SRS_RTSP_4_ENABLED:-off}"
+      SRS_RTSP_4_SOURCE_URL: "${SRS_RTSP_4_SOURCE_URL:-rtsp://user:password@camera-ip:554/stream4}"
+      SRS_RTSP_4_OUTPUT_RTMP_URL: "${SRS_RTSP_4_OUTPUT_RTMP_URL:-rtmp://127.0.0.1/live/camera-4}"
     volumes:
       - ./srs/srs.secure.conf.template:/usr/local/srs/conf/srs.secure.conf.template:ro
 

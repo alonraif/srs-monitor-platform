@@ -27,7 +27,7 @@ def enforce_backend_api_auth(request: Request) -> None:
     if request.method == "OPTIONS":
         # Let CORS preflight pass without API keys.
         return
-    if path in {"/api/health", "/api/live"}:
+    if path in {"/api/health", "/api/live", "/api/auth/login", "/api/auth/logout", "/api/auth/session"}:
         return
 
     provided = _extract_api_key(request)

@@ -11,7 +11,7 @@ const navItems = [
   { label: "Settings", to: "/settings" }
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -31,7 +31,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             src="https://cdn-liveutv.pressidium.com/wp-content/uploads/2024/01/Live-and-Ulimted-all-white-V2.png"
             alt="Live and Unlimited"
           />
-          <div className="topbar-status">Auto-refresh: 5s</div>
+          <div className="topbar-actions">
+            <div className="topbar-status">Auto-refresh: 5s</div>
+            <button className="btn-xs" onClick={onLogout}>Logout</button>
+          </div>
         </header>
         <main className="page">{children}</main>
       </section>

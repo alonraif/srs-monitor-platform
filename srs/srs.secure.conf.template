@@ -44,6 +44,66 @@ stats {
 }
 
 vhost __defaultVhost__ {
+    ingest rtsp_ingest_1 {
+        enabled      __SRS_RTSP_1_ENABLED__;
+        ffmpeg       /usr/local/srs/objs/ffmpeg/bin/ffmpeg;
+        input {
+            type     stream;
+            url      __SRS_RTSP_1_SOURCE_URL__;
+        }
+        engine {
+            enabled  on;
+            vcodec   copy;
+            acodec   copy;
+            output   __SRS_RTSP_1_OUTPUT_RTMP_URL__;
+        }
+    }
+
+    ingest rtsp_ingest_2 {
+        enabled      __SRS_RTSP_2_ENABLED__;
+        ffmpeg       /usr/local/srs/objs/ffmpeg/bin/ffmpeg;
+        input {
+            type     stream;
+            url      __SRS_RTSP_2_SOURCE_URL__;
+        }
+        engine {
+            enabled  on;
+            vcodec   copy;
+            acodec   copy;
+            output   __SRS_RTSP_2_OUTPUT_RTMP_URL__;
+        }
+    }
+
+    ingest rtsp_ingest_3 {
+        enabled      __SRS_RTSP_3_ENABLED__;
+        ffmpeg       /usr/local/srs/objs/ffmpeg/bin/ffmpeg;
+        input {
+            type     stream;
+            url      __SRS_RTSP_3_SOURCE_URL__;
+        }
+        engine {
+            enabled  on;
+            vcodec   copy;
+            acodec   copy;
+            output   __SRS_RTSP_3_OUTPUT_RTMP_URL__;
+        }
+    }
+
+    ingest rtsp_ingest_4 {
+        enabled      __SRS_RTSP_4_ENABLED__;
+        ffmpeg       /usr/local/srs/objs/ffmpeg/bin/ffmpeg;
+        input {
+            type     stream;
+            url      __SRS_RTSP_4_SOURCE_URL__;
+        }
+        engine {
+            enabled  on;
+            vcodec   copy;
+            acodec   copy;
+            output   __SRS_RTSP_4_OUTPUT_RTMP_URL__;
+        }
+    }
+
     http_hooks {
         enabled     on;
         on_publish  __SRS_HOOK_ON_PUBLISH_URL__;

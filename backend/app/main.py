@@ -7,7 +7,9 @@ from fastapi.responses import JSONResponse
 from .auth import enforce_backend_api_auth
 from .database import init_db
 from .config import get_settings
+from .session_auth import enforce_ui_session_auth
 from .routers import alarms, clients, config_srt_security, config_streams, dashboard, health, internal_srs_hooks, live, multiview, preview, stream_auth, stream_notes, streams, system
+from .routers import ui_auth
 
 
 settings = get_settings()
@@ -38,6 +40,7 @@ async def startup() -> None:
 async def api_auth_middleware(request: Request, call_next):
     try:
         enforce_backend_api_auth(request)
+        enforce_ui_session_auth(request)
     except HTTPException as exc:
         headers = getattr(exc, "headers", None)
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
@@ -56,5 +59,6 @@ app.include_router(config_srt_security.router, prefix="/api", tags=["config-srt-
 app.include_router(preview.router, prefix="/api", tags=["preview"])
 app.include_router(multiview.router, prefix="/api", tags=["multiview"])
 app.include_router(live.router, prefix="/api", tags=["live"])
+app.include_router(ui_auth.router, prefix="/api", tags=["ui-auth"])
 app.include_router(stream_auth.router, prefix="/api", tags=["stream-auth"])
 app.include_router(internal_srs_hooks.router, prefix="/internal", tags=["internal-srs-hooks"])

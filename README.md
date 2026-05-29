@@ -39,6 +39,9 @@ Open:
 `SRS_SRT_PASSPHRASE`, `SRS_SRT_PBKEYLEN` SRS listener-side SRT encryption settings (must match encoder)
 `SRS_HOOK_SHARED_SECRET` shared secret expected by backend internal SRS hook endpoints
 `SRS_HOOK_ON_PUBLISH_URL`, `SRS_HOOK_ON_PLAY_URL` SRS callback URLs used by secure SRS template
+`SRS_RTSP_{1..4}_ENABLED` `on|off` per-camera RTSP ingest enable flags in secure SRS template
+`SRS_RTSP_{1..4}_SOURCE_URL` per-camera RTSP input URLs consumed by SRS ingest FFmpeg
+`SRS_RTSP_{1..4}_OUTPUT_RTMP_URL` per-camera internal RTMP output URLs (for example `rtmp://127.0.0.1/live/camera-1`)
 `SRS_API_TIMEOUT_SECONDS` SRS API timeout (default `2.5`)
 `MOCK_MODE` `true|false` (default `true`)
 `SQLITE_PATH` backend SQLite DB path (default `/data/monitor.db`)
@@ -258,6 +261,23 @@ SRT publish with FFmpeg:
 ffmpeg -re -stream_loop -1 -i input.mp4 \
   -c copy -f mpegts "srt://localhost:10080?streamid=#!::r=live/main-program,m=publish"
 ```
+
+RTSP pull via SRS ingest (secure overlays, multi-camera):
+
+1. Set `.env`:
+```env
+SRS_RTSP_1_ENABLED=on
+SRS_RTSP_1_SOURCE_URL=rtsp://user:password@camera-a-ip:554/stream1
+SRS_RTSP_1_OUTPUT_RTMP_URL=rtmp://127.0.0.1/live/camera-1
+SRS_RTSP_2_ENABLED=on
+SRS_RTSP_2_SOURCE_URL=rtsp://user:password@camera-b-ip:554/stream1
+SRS_RTSP_2_OUTPUT_RTMP_URL=rtmp://127.0.0.1/live/camera-2
+```
+2. Restart SRS stack.
+3. Pull playback from SRS per output stream:
+   - `webrtc://localhost/live/camera-1`
+   - `http://localhost:8080/live/camera-1.m3u8`
+   - `http://localhost:8080/live/camera-1.flv`
 
 OBS (RTMP) settings:
 - Server: `rtmp://localhost:1935/live`
